@@ -56,14 +56,8 @@ interface ThemeCtx { theme: GrokTheme; setKind: (k: "light" | "dark") => void }
 const Ctx = createContext<ThemeCtx>({ theme: lightTheme, setKind: () => undefined });
 
 export function ThemeProvider(props: { children?: ReactNode }) {
-  const media = typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-  const [kind, setKind] = useState<"light" | "dark">(media?.matches ? "dark" : "light");
-  useEffect(() => {
-    if (!media) return;
-    const on = (e: MediaQueryListEvent) => setKind(e.matches ? "dark" : "light");
-    media.addEventListener("change", on);
-    return () => media.removeEventListener("change", on);
-  }, [media]);
+  // Always open in light mode; the header button still toggles dark mode.
+  const [kind, setKind] = useState<"light" | "dark">("light");
   const theme = kind === "dark" ? darkTheme : lightTheme;
   useEffect(() => {
     document.body.style.margin = "0";
