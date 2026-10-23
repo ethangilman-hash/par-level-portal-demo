@@ -60,3 +60,7 @@ src/
 ```
 
 Sample data is generated deterministically from a seeded hash, so every load looks the same.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
