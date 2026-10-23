@@ -4,499 +4,21 @@ import {
 } from "./kit";
 import type { ReactNode, CSSProperties, TableCell } from "./kit";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SAMPLE DATA. Product names, categories, sizes, THC and shelf prices are adapted
-// from a public dispensary menu with every brand renamed to a parody name.
-// Quantities, pars, sales, costs, orders and invoices are invented for the demo.
-// ─────────────────────────────────────────────────────────────────────────────
-// Catalog: product names, categories, sizes, THC and shelf (out-the-door) prices adapted from a real dispensary menu (2026-10-22);
-// every brand is renamed to a parody name. The Ironic line is invented using real menu sizes and price ranges.
-// Tuple: sku, vendorId, name, brand, category, subcategory, strain, size, shelfPrice, thc
-const MENU_SKUS: readonly (readonly [string, string, string, string, string, string, string, string, number, string])[] = [
-  ["PGR-101", "poor", "Mid-Town Haze", "PoorGrown", "Flower", "bulk-flower", "Sativa", "1/8oz", 17, "27.78%"],
-  ["RBD-101", "rbd", "Azul Bluntz", "Red Beard", "Flower", "", "Indica-Hybrid", "1/8oz", 17, "22.42%"],
-  ["RBD-102", "rbd", "Candy Fumez", "Red Beard", "Flower", "", "Indica-Hybrid", "1/8oz", 17, "25.19%"],
-  ["RBD-103", "rbd", "Sade", "Red Beard", "Flower", "", "Indica", "1/8oz", 17, "24.91%"],
-  ["HMZ-101", "hmz", "Peach Cobbler Infused + Flavored Blunt - 2.68g", "Hellamidz", "Pre-Rolls", "blunts", "Hybrid", "2.68g", 14, "33.9%"],
-  ["HMZ-102", "hmz", "Variety Infused + Flavored Pre-Roll 5pk - 2.67g", "Hellamidz", "Pre-Rolls", "infused-pre-roll-packs", "N/A", "2.67g", 15, ""],
-  ["HMZ-103", "hmz", "Maui Sunrise Cloud Bar Rechargeable Disposable 2g", "Hellamidz", "Vaporizers", "disposables", "Sativa", "2g", 34, "86.8%"],
-  ["HMZ-104", "hmz", "Cherry Pie Cloud Bar Rechargeable Disposable 1g", "Hellamidz", "Vaporizers", "disposables", "Indica-Hybrid", "1g", 20, "84.8%"],
-  ["HMZ-105", "hmz", "OG Hybrid Terpz Cartridge 1g", "Hellamidz", "Vaporizers", "cartridges", "Hybrid", "1g", 15, "85.6%"],
-  ["HMZ-106", "hmz", "Haze Sativa Terpz Cartridge 1g", "Hellamidz", "Vaporizers", "cartridges", "Sativa", "1g", 15, "83.7%"],
-  ["HMZ-107", "hmz", "Bomb Popz Cloud Bar Rechargeable Disposable 2g", "Hellamidz", "Vaporizers", "cartridges", "Sativa", "2g", 34, "81.3%"],
-  ["HMZ-108", "hmz", "Bomb Pop Profilez Cartridge 1g", "Hellamidz", "Vaporizers", "cartridges", "Sativa", "1g", 18, "89.4%"],
-  ["HMZ-109", "hmz", "Kush Indica Terpz Cartridge 1g", "Hellamidz", "Vaporizers", "cartridges", "Indica", "1g", 15, "79.8%"],
-  ["HMZ-110", "hmz", "Mango Dragon Cloud Bar Disposable 1g", "Hellamidz", "Vaporizers", "cartridges", "Hybrid", "1g", 20, "83%"],
-  ["PGR-102", "poor", "Stay Grounded - Lime Sorbet Botanical Flavored Cart - 2g", "PoorGrown", "Vaporizers", "cartridges", "N/A", "2g", 25, "89.6%"],
-  ["HMZ-111", "hmz", "Water'Yer Melon Cloud Bar Disposable 2g", "Hellamidz", "Vaporizers", "disposables", "Indica", "2g", 34, "82.9%"],
-  ["HMZ-112", "hmz", "Maui Sunrise Profilez Cartridge 1g", "Hellamidz", "Vaporizers", "cartridges", "Sativa", "1g", 18, "89.8%"],
-  ["HMZ-113", "hmz", "OG Mint Cloud Bar Disposable 1g", "Hellamidz", "Vaporizers", "disposables", "Hybrid", "1g", 20, "87.7%"],
-  ["HMZ-114", "hmz", "Water'Yer Melon Cloud Bar Disposable 1g", "Hellamidz", "Vaporizers", "disposables", "Indica", "1g", 20, "89.8%"],
-  ["MYL-101", "myld", "Raspberry Sativa Gummies 100mg - 1.4oz", "Myld", "Edible", "gummies", "Sativa", "39.68g", 17, "100mg"],
-  ["MYL-102", "myld", "Sour Cherry Gummies Indica Enhanced 100mg - 1.4oz", "Myld", "Edible", "gummies", "Indica", "39.68g", 17, "100mg"],
-  ["MYL-103", "myld", "Elderberry 2:1 THC:CBN Gummies 100mg - 1.4oz", "Myld", "Edible", "gummies", "N/A", "39.68g", 20, "100mg"],
-  ["MYL-104", "myld", "Boysenberry 1:1:1 THC:CBD:CBN 100mg Gummies - 1.4oz", "Myld", "Edible", "gummies", "N/A", "39.68g", 20, "100mg"],
-  ["MYL-105", "myld", "Prickly Pear Gummies Sativa Enhanced 100mg - 1.4oz", "Myld", "Edible", "gummies", "Sativa", "39.68g", 17, "100mg"],
-  ["MYL-106", "myld", "POG 1:1 THC:CBG Single Gummy - 0.71oz", "Myld", "Edible", "gummies", "N/A", "20g", 8, "100mg"],
-  ["MYL-107", "myld", "Huckleberry Gummies 100mg - 1.4oz", "Myld", "Edible", "gummies", "N/A", "39.68g", 17, "100mg"],
-  ["MYL-108", "myld", "Raspberry Lime 1:1 THC:CBD Single Gummy - 0.71oz", "Myld", "Edible", "gummies", "N/A", "20g", 8, "100mg"],
-  ["HMZ-115", "hmz", "Clementine Single Gummy", "Hellamidz", "Edible", "gummies", "Sativa", "10g", 5, "100mg"],
-  ["MYL-109", "myld", "Sour Tangerine Gummies Hybrid Enhanced 100mg - 1.4oz", "Myld", "Edible", "gummies", "Hybrid", "39.68g", 17, "100mg"],
-  ["MYL-110", "myld", "Sour Apple Gummies Sativa Enhanced 100mg - 1.4oz", "Myld", "Edible", "gummies", "Sativa-Hybrid", "39.68g", 17, "100mg"],
-  ["PGR-103", "poor", "Papaya Nectar Rosin - 2g", "PoorGrown", "Concentrate", "rosin", "Hybrid", "2g", 60, "72.1%"],
-  ["PGR-104", "poor", "Rubberband Mimosa Live Rosin 2g", "PoorGrown", "Concentrate", "rosin", "Hybrid", "2g", 60, "70.5%"],
-  ["PGR-105", "poor", "Grape Barrier Reefer Live Rosin - 2g", "PoorGrown", "Concentrate", "rosin", "N/A", "2g", 60, "65.1mg"],
-  ["RBD-104", "rbd", "Supreme Lee Hi Cured Resin Budder - 2g", "Red Beard", "Concentrate", "budder", "Indica-Hybrid", "2g", 22, "77.72%"],
-  ["RBD-105", "rbd", "Candied Oranges Cured Resin Budder - 2g", "Red Beard", "Concentrate", "badder", "Hybrid", "2g", 22, "75.4%"],
-  ["RBD-106", "rbd", "Honey Banana Cured Resin Budder - 2g", "Red Beard", "Concentrate", "badder", "Hybrid", "2g", 22, "77.76%"],
-  ["RBD-107", "rbd", "Grape Gasoline Cured Resin Badder - 2g", "Red Beard", "Concentrate", "badder", "Indica", "2g", 22, "75.13%"],
-  ["IRN-101", "iron", "Strawberry Banana Flavored Cart 1g", "Ironic", "Vaporizers", "cartridges", "Indica", "1g", 15, "84.1%"],
-  ["IRN-102", "iron", "Strawberry Lime Flavored Cart 1g", "Ironic", "Vaporizers", "cartridges", "Hybrid", "1g", 15, "85.3%"],
-  ["IRN-103", "iron", "Blue Dream Flavored Cart 1g", "Ironic", "Vaporizers", "cartridges", "Sativa", "1g", 15, "83.9%"],
-  ["IRN-104", "iron", "Grape Ape Flavored Cart 1g", "Ironic", "Vaporizers", "cartridges", "Indica", "1g", 15, "82.6%"],
-  ["IRN-105", "iron", "Twisted Maui Wowie Infused Glass Tip Blunt 2.3g", "Ironic", "Pre-Rolls", "blunts", "Sativa", "2.3g", 14, "34.2%"],
-  ["IRN-106", "iron", "Mango Haze Infused Glass Tip Blunt 2.3g", "Ironic", "Pre-Rolls", "blunts", "Sativa-Hybrid", "2.3g", 14, "33.1%"],
-  ["IRN-107", "iron", "Purple Punch Infused Glass Tip Blunt 2.3g", "Ironic", "Pre-Rolls", "blunts", "Indica", "2.3g", 14, "35.0%"],
-];
-// Competitor SKUs on the same menu (parody brands), used in Category Insights. Tuple: name, brand, category, size, shelfPrice
-const COMPETITOR_SKUS: readonly (readonly [string, string, string, string, number])[] = [
-  ["Fresh Squeezed OG", "Hula Farms", "Flower", "1/8oz", 10],
-  ["Triangle Kush Cookies", "Raisin Ranchers", "Flower", "1/8oz", 17],
-  ["Mt. Hood Magic Durban", "Raisin Ranchers", "Flower", "1/8oz", 28],
-  ["Moonbow 112", "Arcade", "Flower", "1/8oz", 49],
-  ["Triple Burger", "Nelly & Co", "Flower", "1/8oz", 42],
-  ["Blueberry Muffin", "Willy Wander Farms", "Flower", "1/8oz", 10],
-  ["Tallyman", "Bonzai Farms", "Flower", "1/8oz", 28],
-  ["Zsunami", "Fright Co", "Flower", "1/8oz", 17],
-  ["Cherry Punch #14", "Bunsen Harbor", "Flower", "1/8oz", 10],
-  ["Lemon Roll", "Arcade", "Flower", "1/8oz", 49],
-  ["Peach Flambe", "Early Baker", "Flower", "1/8oz", 42],
-  ["Alpine OG", "Bunsen Harbor", "Flower", "1/8oz", 10],
-  ["Chem XL", "Early Baker", "Flower", "1/8oz", 42],
-  ["SDOT", "NW Toiltech", "Flower", "1/8oz", 49],
-  ["Fire Bellied Toad", "Heaven's Creek Farms", "Flower", "1/8oz", 49],
-  ["Leftovers #11", "LUVLEE", "Flower", "1/8oz", 42],
-  ["Pineapple", "Willy Wander Farms", "Flower", "1/8oz", 10],
-  ["Red Mandarine", "Cellar Farms", "Flower", "1/8oz", 10],
-  ["Limonada/Gas Smack Pre Roll 10PK - 5g", "Avocadas", "Pre-Rolls", "5g", 19],
-  ["Candy Apple Kush Pre-Roll 10pk - 5g", "Herby's Farms", "Pre-Rolls", "5g", 20],
-  ["Berry Bounty/Jammin Jack/Jungle Jelly/Golden Glaze/Funk Budder Pre-Roll 40pks - 28g", "Rebel Spliff", "Pre-Rolls", "1oz", 52],
-  ["Mimosa #98 Live Rosin Snake Oil Infused Pre Roll - 1.5g", "Bunsen Harbor", "Pre-Rolls", "1.5g", 16],
-  ["Piff Pastille/Gumbo Limbo Pre-Roll 10pk - 5g", "Avocadas", "Pre-Rolls", "5g", 20],
-  ["Colorado Nightshifter/Garry's Pineapple/Jealous Toad/Lavender Lemonade Variety Pre-Roll 40pk - 20g", "Vybez", "Pre-Rolls", "20g", 65],
-  ["Fruitopia Pre-Roll 10pk - 5g", "Herby's Farms", "Pre-Rolls", "5g", 20],
-  ["Budder Browniez/Phantom Orbit Pre-Roll 12pk - 8.4g", "Rebel Spliff", "Pre-Rolls", "8.4g", 24],
-  ["Jack Berry/Safari Jam/Garlic Budder Pre-Roll 12pk - 8.4g", "Rebel Spliff", "Pre-Rolls", "8.4g", 24],
-  ["Maple Nectar Pre-Roll 10pk - 5g", "Bonafried Cannabis", "Pre-Rolls", "5g", 19],
-  ["Mimosa Infused Pre-Roll 2pk - 1.5g", "Faltered Alchemy", "Pre-Rolls", "1.5g", 14],
-  ["Sour Fifty Pre Roll 6PK - 3.6g", "Bunsen Harbor", "Pre-Rolls", "3.6g", 17],
-  ["Cherry Glue Infused Pre-Roll 2pk - 1.5g", "Faltered Alchemy", "Pre-Rolls", "1.5g", 15],
-  ["Whistlin' Pixie Pre-Roll 8pk - 4g", "Hocus North Gardens", "Pre-Rolls", "4g", 15],
-  ["Jungle Cake/London Jelly Pre-Roll 10pk - 5g", "Funny Jays", "Pre-Rolls", "5g", 15],
-  ["Natural Disaster Pre-Roll 10pk - 5g", "Herby's Farms", "Pre-Rolls", "5g", 20],
-  ["91 Angel OG/ Motorboat Pre-Roll 10pk - 5g", "Iron Lunge", "Pre-Rolls", "5g", 15],
-  ["Gaszilla Pre-Roll 8pk - 4g", "Hocus North Gardens", "Pre-Rolls", "4g", 15],
-  ["Watermelon Flavored Liquid Diamonds Cart - 1g", "Bougie Bendz", "Vaporizers", "1g", 15],
-  ["Tangie Flavored Disposable Pod - 2.5g", "Hire Cultures Extracts", "Vaporizers", "2.5g", 34],
-  ["Wedding Cake Flavored Disposable Pod - 2.5g", "Hire Cultures Extracts", "Vaporizers", "2.5g", 34],
-  ["Pink Rozay Distillate Cart - 1g", "Bitter", "Vaporizers", "1g", 16],
-  ["Key Lime Z Cart - 1g", "Bitter", "Vaporizers", "1g", 16],
-  ["Durban Poison Flavored Disposable Pod - 2.5g", "Hire Cultures Extracts", "Vaporizers", "2.5g", 34],
-  ["Banana Flavored Liquid Diamond Cart - 1g", "Bougie Bendz", "Vaporizers", "1g", 15],
-  ["THC Raspberry Lemonade Pearls - Sativa", "Grump", "Edible", "35.0g", 8],
-  ["Blackberry 20-Piece [Soothing Relaxation] (1:2)", "Flops", "Edible", "44.0g", 16],
-  ["4:1 Pomegranate Pearls - CBD/THC - Hybrid", "Grump", "Edible", "34.0194g", 16],
-  ["THC Passion Orange Guava Mega - Hybrid", "Grump", "Edible", "20g", 5],
-  ["THC Cherry Limeade Mega - Indica", "Grump", "Edible", "19.8447g", 5],
-  ["Black Currant 2-Piece [Deep Relaxation] (1:1:1)", "Flops", "Edible", "12.0g", 8],
-  ["Midnight Melon - (Indica) 100mg THC Single Rosin Gummy", "Happy Cribbage", "Edible", "12.0g", 8],
-  ["Watermelon Pearls - THC - Indica", "Grump", "Edible", "34.0194g", 8],
-  ["Milk Chocolate Mini Bar - THC - Hybrid", "Grump", "Edible", "1/4oz", 7],
-  ["Black Currant 20-Piece [Deep Relaxation] (1:1:1)", "Flops", "Edible", "44.0g", 16],
-  ["1:1 CBD Transdermal Patch -1.2g", "Sinergy Skin Werx", "Topicals", "1.2g", 29],
-  ["THC Transdermal Patch - 0.5g", "Sinergy Skin Werx", "Topicals", ".5g", 20],
-  ["Entourage Transdermal Full Spectrum Patch - 0.5g", "Sinergy Skin Werx", "Topicals", ".5g", 22],
-  ["Dragon's Blend Balm - 2oz", "Meditation Farm", "Topicals", "56.7g", 48],
-  ["Cascadia Blend 1:1 Balm 250mg - 2oz", "Meditation Farm", "Topicals", "56.7g", 48],
-  ["White Lavender Soak & Fizz 1:1:1 THC:CBD:CBG - 4oz", "High Dessert Pure", "Topicals", "113.0g", 20],
-  ["Vanilla Almond Biscotti Lip Balm - 0.16oz", "High Dessert Pure", "Topicals", "4.5359g", 6],
-  ["Transdermal Roller Ball 1:1:1 - 0.6oz", "High Dessert Pure", "Topicals", "17.0g", 36],
-  ["Baked Battery (Mint)", "Nearly", "Accessories", "each", 10],
-  ["Stick 510 Battery", "Eko Electuary", "Accessories", "each", 20],
-  ["Baked Battery (Gold)", "Nearly", "Accessories", "each", 10],
-  ["510 Dual Cart Tandem Battery (Blue)", "Pulser", "Accessories", "each", 33],
-  ["Purple Rain FECO - 1g", "Faltered Alchemy", "Concentrate", "1g", 19],
-  ["Burger Drip THCa - 1g", "Light Label Extracts", "Concentrate", "1g", 15],
-  ["Cherry Cruz Cured Resin Dab - 2g", "Sifted Northwest", "Concentrate", "2g", 19],
-  ["Pineapple Mojito Shatter - 1g", "Afterthought", "Concentrate", "1g", 11],
-  ["White Truffle Live Rosin - 1g", "Hocus North Gardens", "Concentrate", "1g", 58],
-  ["Papaya Melonz Rosin - 2g", "SUNFLOUR", "Concentrate", "2g", 53],
-  ["Pug's Breath Cured Resin Sugar Wax - 2g", "Legume", "Concentrate", "2g", 20],
-  ["Tribute Cured Resin - 1g", "Alto Gardens", "Concentrate", "1g", 10],
-  ["Headband Shatter - 1g", "Light Label Extracts", "Concentrate", "1g", 15],
-  ["Zambino Liquid Diamonds - 2g", "Westwood Gardens", "Concentrate", "2g", 19],
-  ["Grape Mountain Live Diamonds & Sauce -2g", "Bodies", "Concentrate", "2g", 26],
-  ["Indica THC Tincture - 1oz", "Farmer's Fiend", "Tincture", "28.35g", 35],
-  ["1:1 CBG:CBD Tincture - 1oz", "Farmer's Fiend", "Tincture", "28.35g", 27],
-  ["Mango Passion Adabinol - 4oz", "Dirty Farm Arm", "Tincture", "109.4g", 48],
-  ["Wedding Pie Live Resin Tincture - 1oz", "Bobslid Extracts", "Tincture", "30g", 36],
-  ["Headband Live Resin Tincture - 1oz", "Bobslid Extracts", "Tincture", "30g", 36],
-  ["Durban Poison Live Resin Tincture - 1oz", "Bobslid Extracts", "Tincture", "30g", 36],
-];
-
-type StatusToneT = "success" | "warning" | "danger" | "accent" | "neutral";
-
-interface Vendor { id: string; name: string; leadDays: number; minOrder: number; terms: string; emails: string[] }
-const VENDORS: Vendor[] = [
-  { id: "hmz", name: "Hellamidz", leadDays: 3, minOrder: 250, terms: "Net 14", emails: ["orders@hellamidz.example", "ar@hellamidz.example"] },
-  { id: "myld", name: "Myld", leadDays: 5, minOrder: 350, terms: "Net 14", emails: ["wholesale@myld.example"] },
-  { id: "poor", name: "PoorGrown", leadDays: 2, minOrder: 300, terms: "Net 7", emails: ["sales@poorgrown.example", "finance@poorgrown.example"] },
-  { id: "rbd", name: "Red Beard", leadDays: 3, minOrder: 200, terms: "Net 14", emails: ["crew@redbeard.example"] },
-  { id: "iron", name: "Ironic", leadDays: 4, minOrder: 300, terms: "Net 14", emails: ["orders@ironic.example", "reports@ironic.example"] },
-];
-const VENDOR_BY_ID: Record<string, Vendor> = Object.fromEntries(VENDORS.map((v) => [v.id, v]));
-const RETAILER = "Demo Dispensary Co.";
-interface Loc { id: string; name: string }
-const LOCS: Loc[] = [
-  { id: "south", name: "South Main" },
-  { id: "east", name: "Eastgate" },
-  { id: "river", name: "Riverside" },
-];
-const LOC_NAME: Record<string, string> = Object.fromEntries(LOCS.map((l) => [l.id, l.name]));
-const LOC_FACTOR: Record<string, number> = { south: 1, east: 0.78, river: 0.6 };
-const WEEKS = ["Aug 30", "Sep 6", "Sep 13", "Sep 20", "Sep 27", "Oct 4", "Oct 11", "Oct 18"];
-const CAT_BASE: Record<string, number> = { Flower: 9, "Pre-Rolls": 8, Vaporizers: 9, Edible: 11, Concentrate: 4, Topicals: 2, Tincture: 2, Accessories: 3 };
-const CASE_PACK: Record<string, number> = { Flower: 6, "Pre-Rolls": 10, Vaporizers: 10, Edible: 12, Concentrate: 5 };
-const CARRIERS = ["Licensed courier (route van)", "Vendor fleet", "Third-party cannabis transport"];
-const SLA_HOURS = 24;
-
-const MIN = 60000;
-const HOUR = 60 * MIN;
-const DAY = 24 * HOUR;
-const BASE = Date.UTC(2026, 9, 22, 17, 0); // Oct 22, 2026, 10:00 AM PT (demo clock start)
-
-function h(s: string): number {
-  let x = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    x ^= s.charCodeAt(i);
-    x = Math.imul(x, 16777619);
-  }
-  return ((x >>> 0) % 10000) / 10000;
-}
-const money = (n: number): string => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-const money0 = (n: number): string => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const dFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
-const dtFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" });
-const fd = (ms: number): string => dFmt.format(ms);
-const fdt = (ms: number): string => dtFmt.format(ms) + " PT";
-const toInt = (s: string): number => {
-  const n = Math.floor(Number(s));
-  return Number.isFinite(n) && n > 0 ? n : 0;
-};
-function ageLabel(ms: number): string {
-  const hrs = ms / HOUR;
-  if (hrs < 1) return `${Math.max(1, Math.round(ms / MIN))}m`;
-  if (hrs < 48) return `${Math.round(hrs)}h`;
-  return `${Math.round(hrs / 24)}d`;
-}
-
-interface Product {
-  sku: string; vendorId: string; name: string; brand: string; category: string; sub: string; strain: string;
-  size: string; price: number; thc: string; cost: number; casePack: number; group: string;
-}
-const PRODUCTS: Product[] = MENU_SKUS.map((r) => {
-  const [sku, vendorId, name, brand, category, sub, strain, size, price, thc] = r;
-  const cost = Math.round(price * (0.45 + 0.1 * h(sku + "c")) * 100) / 100;
-  return {
-    sku, vendorId, name, brand, category, sub, strain, size, price, thc, cost,
-    casePack: CASE_PACK[category] ?? 6,
-    group: `${category}${sub ? " · " + sub : ""} · ${size}`,
-  };
-});
-const PRODUCT: Record<string, Product> = Object.fromEntries(PRODUCTS.map((p) => [p.sku, p]));
-
-interface Item { key: string; name: string; brand: string; category: string; size: string; price: number; vendorId: string | null }
-const ITEMS: Item[] = [
-  ...PRODUCTS.map((p): Item => ({ key: p.sku, name: p.name, brand: p.brand, category: p.category, size: p.size, price: p.price, vendorId: p.vendorId })),
-  ...COMPETITOR_SKUS.map((r, i): Item => ({ key: `C-${i + 1}`, name: r[0], brand: r[1], category: r[2], size: r[3], price: r[4], vendorId: null })),
-];
-const ITEM: Record<string, Item> = Object.fromEntries(ITEMS.map((i) => [i.key, i]));
-
-// Weekly unit sales per item, per location, for the last 8 weeks (sample).
-// Ironic is, by design, the best seller in every one of its categories at every
-// location and week — by units and by revenue — at ordinary shelf prices.
-function buildSales(): Record<string, Record<string, number[]>> {
-  const out: Record<string, Record<string, number[]>> = {};
-  for (const it of ITEMS) {
-    if (it.vendorId === "iron") continue;
-    const base = (CAT_BASE[it.category] ?? 3) * (0.5 + 1.1 * h(it.key + "b"));
-    const trend = (h(it.key + "t") - 0.5) * 0.9;
-    const row: Record<string, number[]> = {};
-    for (const l of LOCS) {
-      row[l.id] = WEEKS.map((_, w) =>
-        Math.max(0, Math.round(base * LOC_FACTOR[l.id] * (0.75 + 0.5 * h(it.key + l.id + w)) * (1 + (trend * (w - 3.5)) / 7))),
-      );
-    }
-    out[it.key] = row;
-  }
-  const ironic = ITEMS.filter((i) => i.vendorId === "iron");
-  const cats = Array.from(new Set(ironic.map((i) => i.category)));
-  for (const c of cats) {
-    const mine = ironic.filter((i) => i.category === c);
-    const others = ITEMS.filter((i) => i.category === c && i.vendorId !== "iron");
-    for (const it of mine) out[it.key] = {};
-    for (const l of LOCS) {
-      for (const it of mine) out[it.key][l.id] = [];
-      for (let w = 0; w < WEEKS.length; w++) {
-        let mu = 0;
-        let mr = 0;
-        for (const o of others) {
-          const u = out[o.key][l.id][w];
-          mu = Math.max(mu, u);
-          mr = Math.max(mr, u * o.price);
-        }
-        mine.forEach((it, i) => {
-          const floor = Math.max(mu, mr / it.price);
-          out[it.key][l.id].push(Math.ceil(floor * 1.12) + (mine.length - i) * 2 + Math.round(h(it.key + l.id + w)));
-        });
-      }
-    }
-  }
-  return out;
-}
-const SALES = buildSales();
-const salesAt = (key: string, loc: string): number[] =>
-  loc === "all" ? WEEKS.map((_, w) => LOCS.reduce((s, l) => s + SALES[key][l.id][w], 0)) : SALES[key][loc];
-const last4 = (arr: number[]): number => (arr[4] + arr[5] + arr[6] + arr[7]) / 4;
-const perDay = (sku: string, loc: string): number => last4(SALES[sku][loc]) / 7;
-
-interface ParLevel { min: number; max: number; maxStrains: number }
-const PARS: Record<string, ParLevel> = {};
-for (const l of LOCS) {
-  for (const v of VENDORS) {
-    const groups = Array.from(new Set(PRODUCTS.filter((p) => p.vendorId === v.id).map((p) => p.group)));
-    for (const g of groups) {
-      const ps = PRODUCTS.filter((p) => p.vendorId === v.id && p.group === g);
-      const avgWeekly = ps.reduce((s, p) => s + last4(SALES[p.sku][l.id]), 0) / ps.length;
-      const max = Math.max(4, Math.ceil(avgWeekly * 2.2));
-      PARS[`${l.id}|${v.id}|${g}`] = { min: Math.max(2, Math.round(max * 0.4)), max, maxStrains: ps.length + (h(g + l.id) > 0.6 ? 1 : 0) };
-    }
-  }
-}
-const parOf = (loc: string, sku: string): ParLevel => {
-  const p = PRODUCT[sku];
-  return PARS[`${loc}|${p.vendorId}|${p.group}`];
-};
-
-interface Stock { qoh: number; received: number }
-type InvMap = Record<string, Stock>;
-function seedInventory(): InvMap {
-  const m: InvMap = {};
-  for (const l of LOCS) {
-    for (const p of PRODUCTS) {
-      const par = parOf(l.id, p.sku);
-      const f = h(p.sku + l.id + "q");
-      const qoh = Math.round(par.max * (f < 0.42 ? f * 0.9 : 0.4 + f * 0.75));
-      m[`${l.id}|${p.sku}`] = { qoh, received: BASE - Math.round((3 + h(p.sku + l.id + "r") * 20) * DAY) };
-    }
-  }
-  return m;
-}
-
-type OrderStatus = "Pending" | "Countered" | "Approved" | "Rejected" | "Shipped" | "Received";
-interface OrderLine { sku: string; requested: number; approved: number; received: number; damaged: number; unitCost: number; basis: string }
-interface Note { by: string; text: string; at: number }
-interface Order {
-  id: string; vendorId: string; locId: string; status: OrderStatus; lines: OrderLine[]; mode: string;
-  submittedAt: number; counteredAt?: number; approvedAt?: number; rejectedAt?: number; shippedAt?: number; receivedAt?: number;
-  carrier?: string; manifest?: string; etaAt?: number; notes: Note[]; invoiceId?: string; discrepancy?: string;
-}
-interface Invoice { id: string; vendorId: string; locId: string; orderId: string; date: number; amount: number; payments: { at: number; amount: number }[] }
-interface LogEntry { at: number; actor: string; vendorId: string | null; text: string }
-
-const STATUS_TONE: Record<OrderStatus, StatusToneT> = {
-  Pending: "warning", Countered: "warning", Approved: "accent", Rejected: "danger", Shipped: "accent", Received: "success",
-};
-const OPEN: OrderStatus[] = ["Pending", "Countered", "Approved", "Shipped"];
-
-function ln(sku: string, requested: number, approved?: number, received?: number, damaged?: number): OrderLine {
-  const a = approved ?? requested;
-  return { sku, requested, approved: a, received: received ?? 0, damaged: damaged ?? 0, unitCost: PRODUCT[sku].cost, basis: "Order to Max" };
-}
-const lineSum = (lines: OrderLine[], f: (l: OrderLine) => number): number => lines.reduce((s, l) => s + f(l) * l.unitCost, 0);
-const orderValue = (o: Order): number =>
-  o.status === "Received" ? lineSum(o.lines, (l) => Math.max(0, l.received - l.damaged))
-    : o.status === "Pending" ? lineSum(o.lines, (l) => l.requested) : lineSum(o.lines, (l) => l.approved);
-
-function seedOrders(): Order[] {
-  return [
-    {
-      id: "PO-1057", vendorId: "iron", locId: "south", status: "Pending", mode: "Velocity-based",
-      lines: [ln("IRN-101", 30), ln("IRN-102", 20), ln("IRN-105", 20)], submittedAt: BASE - 5 * HOUR,
-      notes: [{ by: "Ironic", text: "Strawberry Banana keeps selling out by Saturday; sized to cover lead time plus 3 days of safety stock.", at: BASE - 5 * HOUR }],
-    },
-    {
-      id: "PO-1055", vendorId: "hmz", locId: "east", status: "Pending", mode: "Order to Max",
-      lines: [ln("HMZ-103", 10), ln("HMZ-111", 10), ln("HMZ-113", 20)], submittedAt: BASE - 28 * HOUR, notes: [],
-    },
-    {
-      id: "PO-1058", vendorId: "poor", locId: "river", status: "Countered", mode: "Order to Max",
-      lines: [ln("PGR-103", 10, 5), ln("PGR-104", 10, 10)], submittedAt: BASE - 9 * HOUR, counteredAt: BASE - 2 * HOUR,
-      notes: [{ by: RETAILER, text: "Rosin moves slower at Riverside. Proposing 5 Papaya Nectar instead of 10; the rest is fine.", at: BASE - 2 * HOUR }],
-    },
-    {
-      id: "PO-1052", vendorId: "myld", locId: "east", status: "Approved", mode: "Velocity-based",
-      lines: [ln("MYL-101", 24), ln("MYL-107", 36, 24), ln("MYL-103", 12)], submittedAt: BASE - 30 * HOUR, approvedAt: BASE - 6 * HOUR,
-      notes: [{ by: RETAILER, text: "Approved. Trimmed Huckleberry from 36 to 24 while we clear a display.", at: BASE - 6 * HOUR }],
-    },
-    {
-      id: "PO-1048", vendorId: "hmz", locId: "south", status: "Shipped", mode: "Order to Max",
-      lines: [ln("HMZ-105", 20), ln("HMZ-109", 20), ln("HMZ-104", 10)], submittedAt: BASE - 3 * DAY, approvedAt: BASE - 62 * HOUR,
-      shippedAt: BASE - 22 * HOUR, carrier: CARRIERS[0], manifest: "MNF-2610-48217", etaAt: BASE + 4 * HOUR, notes: [],
-    },
-    {
-      id: "PO-1041", vendorId: "rbd", locId: "south", status: "Received", mode: "Order to Max",
-      lines: [ln("RBD-101", 12, 12, 12), ln("RBD-104", 10, 10, 10, 1), ln("RBD-106", 10, 10, 9)], submittedAt: BASE - 9 * DAY,
-      approvedAt: BASE - 8.8 * DAY, shippedAt: BASE - 8 * DAY, receivedAt: BASE - 6 * DAY, carrier: CARRIERS[1], manifest: "MNF-2610-41090",
-      etaAt: BASE - 6 * DAY, invoiceId: "INV-29102", discrepancy: "Short 1 × Honey Banana Cured Resin Budder; 1 × Supreme Lee Hi Cured Resin Budder damaged",
-      notes: [{ by: RETAILER, text: "Received. One budder jar arrived cracked; credited on the invoice.", at: BASE - 6 * DAY }],
-    },
-    {
-      id: "PO-1036", vendorId: "rbd", locId: "east", status: "Rejected", mode: "Order to Max",
-      lines: [ln("RBD-105", 15), ln("RBD-107", 15)], submittedAt: BASE - 13 * DAY, rejectedAt: BASE - 12 * DAY,
-      notes: [{ by: RETAILER, text: "We're over Max on budder at Eastgate. Please resubmit after the next count.", at: BASE - 12 * DAY }],
-    },
-    {
-      id: "PO-1029", vendorId: "iron", locId: "east", status: "Received", mode: "Velocity-based",
-      lines: [ln("IRN-103", 40, 40, 40), ln("IRN-106", 30, 30, 30)], submittedAt: BASE - 17 * DAY, approvedAt: BASE - 16.8 * DAY,
-      shippedAt: BASE - 16 * DAY, receivedAt: BASE - 15 * DAY, carrier: CARRIERS[2], manifest: "MNF-2610-29004", etaAt: BASE - 15 * DAY,
-      invoiceId: "INV-28660", notes: [],
-    },
-  ];
-}
-function seedInvoices(orders: Order[]): Invoice[] {
-  const amt = (id: string): number => {
-    const o = orders.find((x) => x.id === id);
-    return o ? Math.round(orderValue(o) * 100) / 100 : 0;
-  };
-  return [
-    { id: "INV-28412", vendorId: "hmz", locId: "south", orderId: "PO-1012", date: BASE - 30 * DAY, amount: 1184.4, payments: [{ at: BASE - 17 * DAY, amount: 1184.4 }] },
-    { id: "INV-28660", vendorId: "iron", locId: "east", orderId: "PO-1029", date: BASE - 15 * DAY, amount: amt("PO-1029"), payments: [{ at: BASE - 2 * DAY, amount: amt("PO-1029") }] },
-    { id: "INV-28790", vendorId: "poor", locId: "south", orderId: "PO-1021", date: BASE - 18 * DAY, amount: 1350, payments: [{ at: BASE - 11 * DAY, amount: 675 }] },
-    { id: "INV-28977", vendorId: "myld", locId: "east", orderId: "PO-1033", date: BASE - 10 * DAY, amount: 912.6, payments: [] },
-    { id: "INV-29102", vendorId: "rbd", locId: "south", orderId: "PO-1041", date: BASE - 6 * DAY, amount: amt("PO-1041"), payments: [{ at: BASE - 1 * DAY, amount: 150 }] },
-    { id: "INV-28155", vendorId: "rbd", locId: "east", orderId: "PO-1004", date: BASE - 40 * DAY, amount: 640.5, payments: [{ at: BASE - 27 * DAY, amount: 640.5 }] },
-  ];
-}
-const paidOf = (i: Invoice): number => i.payments.reduce((s, p) => s + p.amount, 0);
-const balOf = (i: Invoice): number => Math.max(0, Math.round((i.amount - paidOf(i)) * 100) / 100);
-
-function seedLog(): LogEntry[] {
-  return [
-    { at: BASE - 2 * HOUR, actor: RETAILER, vendorId: "poor", text: "Counter-proposal sent on PO-1058 (Papaya Nectar 10 → 5)" },
-    { at: BASE - 5 * HOUR, actor: "Ironic", vendorId: "iron", text: "PO-1057 submitted for approval (South Main)" },
-    { at: BASE - 6 * HOUR, actor: RETAILER, vendorId: "myld", text: "PO-1052 approved with changes (Eastgate)" },
-    { at: BASE - 22 * HOUR, actor: "Hellamidz", vendorId: "hmz", text: "PO-1048 shipped via licensed courier, manifest MNF-2610-48217" },
-    { at: BASE - 28 * HOUR, actor: "Hellamidz", vendorId: "hmz", text: "PO-1055 submitted for approval (Eastgate)" },
-    { at: BASE - 1 * DAY, actor: RETAILER, vendorId: "rbd", text: "Payment of $150.00 recorded on INV-29102" },
-    { at: BASE - 6 * DAY, actor: RETAILER, vendorId: "rbd", text: "PO-1041 received at South Main with discrepancies; INV-29102 generated" },
-    { at: BASE - 12 * DAY, actor: RETAILER, vendorId: "rbd", text: "PO-1036 rejected (over Max on budder)" },
-  ];
-}
-
-// ─────────────────────────── derived helpers ───────────────────────────
-function onOrderQty(orders: Order[], loc: string, sku: string): number {
-  let n = 0;
-  for (const o of orders) {
-    if (o.locId !== loc || !OPEN.includes(o.status)) continue;
-    for (const l of o.lines) if (l.sku === sku) n += o.status === "Pending" ? l.requested : l.approved;
-  }
-  return n;
-}
-function stockStatus(qoh: number, par: ParLevel): { label: string; tone: StatusToneT } {
-  if (qoh === 0) return { label: "Out of stock", tone: "danger" };
-  if (qoh < par.min) return { label: "Below Min", tone: "danger" };
-  if (qoh > par.max) return { label: "Over Max", tone: "accent" };
-  return { label: "In range", tone: "success" };
-}
-function catRanks(category: string, loc: string, week: number, by: "units" | "revenue"): string[] {
-  return ITEMS.filter((i) => i.category === category)
-    .map((i) => ({ k: i.key, v: salesAt(i.key, loc)[week] * (by === "revenue" ? i.price : 1) }))
-    .sort((a, b) => b.v - a.v || a.k.localeCompare(b.k))
-    .map((x) => x.k);
-}
-function rank4(category: string, loc: string, by: "units" | "revenue"): { key: string; units: number; revenue: number }[] {
-  return ITEMS.filter((i) => i.category === category)
-    .map((i) => {
-      const u = last4(salesAt(i.key, loc));
-      return { key: i.key, units: u, revenue: u * i.price };
-    })
-    .sort((a, b) => (by === "units" ? b.units - a.units : b.revenue - a.revenue) || a.key.localeCompare(b.key));
-}
-
-interface Suggestion { p: Product; qoh: number; onOrder: number; vday: number; cover: number; par: ParLevel; suggested: number; math: string }
-interface SuggestOpts { mode: "max" | "velocity"; safety: number; review: number; roundCase: boolean; capMax: boolean }
-function suggest(p: Product, loc: string, inv: InvMap, orders: Order[], o: SuggestOpts): Suggestion {
-  const qoh = inv[`${loc}|${p.sku}`].qoh;
-  const onOrder = onOrderQty(orders, loc, p.sku);
-  const par = parOf(loc, p.sku);
-  const vday = perDay(p.sku, loc);
-  const cover = vday > 0 ? qoh / vday : 99;
-  const pos = qoh + onOrder;
-  const lead = VENDOR_BY_ID[p.vendorId].leadDays;
-  let raw = 0;
-  let math = "";
-  if (o.mode === "max") {
-    if (qoh >= par.min) math = `Q.O.H. ${qoh} ≥ Min ${par.min} → no reorder`;
-    else if (pos >= par.max) math = `Q.O.H. ${qoh} < Min ${par.min}, but ${onOrder} already on order reaches Max`;
-    else {
-      raw = par.max - pos;
-      math = `Q.O.H. ${qoh} < Min ${par.min} → Max ${par.max} − ${qoh} on hand − ${onOrder} on order = ${raw}`;
-    }
-  } else {
-    const demand = vday * (lead + o.review);
-    const ss = vday * o.safety;
-    let target = Math.ceil(demand + ss);
-    const capped = o.capMax && target > par.max;
-    if (capped) target = par.max;
-    raw = Math.max(0, target - pos);
-    math = `${vday.toFixed(1)}/day × (${lead}d lead + ${o.review}d review) = ${demand.toFixed(1)}, + safety ${vday.toFixed(1)} × ${o.safety}d = ${ss.toFixed(1)} → target ${target}${capped ? " (capped at Max)" : ""} − ${pos} position = ${raw}`;
-  }
-  let suggested = raw;
-  if (o.roundCase && raw > 0) {
-    const cases = Math.ceil(raw / p.casePack);
-    suggested = cases * p.casePack;
-    math += ` → ${cases} case${cases > 1 ? "s" : ""} of ${p.casePack} = ${suggested}`;
-  }
-  return { p, qoh, onOrder, vday, cover, par, suggested, math };
-}
-
-// ─────────────────────────── visual building blocks ───────────────────────────
-function useStyles() {
-  const t = useGrokTheme();
-  const card: CSSProperties = {
-    border: `1px solid ${t.border.subtle}`, borderRadius: t.radius.lg, background: t.bg.elevated, padding: 16,
-    display: "flex", flexDirection: "column", gap: 14,
-  };
-  const small: CSSProperties = { fontSize: t.font.caption.fontSize, lineHeight: t.font.caption.lineHeight, color: t.text.secondary };
-  const strong: CSSProperties = { fontSize: t.font.body1.fontSize, lineHeight: t.font.body1.lineHeight, color: t.text.primary, fontWeight: t.weight.semibold };
-  const row: CSSProperties = { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" };
-  return { t, card, small, strong, row };
-}
-
-function Card(props: { children?: ReactNode }) {
-  const { card } = useStyles();
-  return <div style={card}>{props.children}</div>;
-}
-
-function Bar(props: { pct: number }) {
-  const { t } = useStyles();
-  return (
-    <div style={{ height: 6, borderRadius: t.radius.full, background: t.fill.secondary, overflow: "hidden" }}>
-      <div style={{ width: `${Math.min(100, props.pct)}%`, height: "100%", background: t.fill.accent, transition: `width ${t.motion.hover}` }} />
-    </div>
-  );
-}
+import {
+  MENU_SKUS, COMPETITOR_SKUS, StatusToneT, Vendor, VENDORS, VENDOR_BY_ID, RETAILER, Loc, LOCS, LOC_NAME, LOC_FACTOR, WEEKS, CAT_BASE, CASE_PACK, CARRIERS, SLA_HOURS, MIN, HOUR, DAY, BASE, h, money, money0, dFmt, dtFmt, fd, fdt, toInt, ageLabel, Product, PRODUCTS, PRODUCT, Item, ITEMS, ITEM, buildSales, SALES, salesAt, last4, perDay, ParLevel, PARS, parOf, Stock, InvMap, seedInventory, OrderStatus, OrderLine, Note, Order, Invoice, LogEntry, STATUS_TONE, OPEN, ln, lineSum, orderValue, seedOrders, seedInvoices, paidOf, balOf, seedLog, onOrderQty, stockStatus, catRanks, rank4, Suggestion, SuggestOpts, suggest,
+} from "./data";
+import { useStyles, Card, Bar, SyncLine } from "./ui";
+import { integrations, withExternalIds, leaflinkNumberFor, LL_STATUS, VENDOR_LICENSE, LOC_LICENSE, QBO_COMPANY, isoDate, type DutchieInventoryItem } from "./integrations";
+import { InventoryTab } from "./views/InventoryTab";
+import { FinanceTab } from "./views/FinanceTab";
+import { IntegrationsTab } from "./views/IntegrationsTab";
+import { AccountsTab, fdw, type AccountSpec } from "./views/AccountsTab";
+import { UpdatesSection } from "./views/UpdatesSection";
+import { UPDATES } from "./updates";
+import {
+  FREQ_DAYS, accKey, lastDelivery, openEta, schedule, seedLocationContacts, seedRetailerNotes, seedRetailerPrefs, seedVendorContacts, seedVendorNotes, seedVendorPrefs,
+  type AccountNote, type AccountPrefs, type Contact,
+} from "./accounts";
 
 interface TLStep { label: string; at?: number; state: "done" | "current" | "todo" | "bad"; meta?: string }
 function Timeline(props: { order: Order }) {
@@ -706,8 +228,8 @@ function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: numb
 }
 
 // ─────────────────────────── vendor views ───────────────────────────
-type VTab = "dash" | "qoh" | "par" | "insights" | "order" | "orders" | "invoices" | "alerts" | "settings";
-type RTab = "overview" | "approvals" | "receiving" | "belowpar" | "orders" | "invoices" | "activity";
+type VTab = "dash" | "qoh" | "par" | "insights" | "order" | "orders" | "invoices" | "retailers" | "alerts" | "settings" | "integrations";
+type RTab = "overview" | "inventory" | "approvals" | "receiving" | "belowpar" | "orders" | "invoices" | "finance" | "vendors" | "activity" | "integrations";
 
 interface Ctx { vendor: Vendor; loc: string; inv: InvMap; orders: Order[]; invoices: Invoice[]; now: number }
 
@@ -917,12 +439,12 @@ function InsightsTab(props: Ctx) {
   );
 }
 
-function OrderBuilder(props: Ctx & { submit: (lines: OrderLine[], mode: string, note: string) => void }) {
+function OrderBuilder(props: Ctx & { submit: (lines: OrderLine[], mode: string, note: string) => void; sched: { prefs: AccountPrefs; next: number; orderBy: number } }) {
   const { vendor, loc, inv, orders } = props;
   const { small, row } = useStyles();
   const [mode, setMode] = useState<"max" | "velocity">("max");
   const [safety, setSafety] = useState("3");
-  const [review, setReview] = useState("7");
+  const [review, setReview] = useState(String(FREQ_DAYS[props.sched.prefs.frequency]));
   const [roundCase, setRoundCase] = useState(true);
   const [capMax, setCapMax] = useState(true);
   const [hideZero, setHideZero] = useState(false);
@@ -937,7 +459,7 @@ function OrderBuilder(props: Ctx & { submit: (lines: OrderLine[], mode: string, 
   const units = lines.reduce((a, s) => a + qtyOf(s), 0);
   const caseIssues = lines.filter((s) => qtyOf(s) % s.p.casePack !== 0);
   const overMax = lines.filter((s) => s.qoh + s.onOrder + qtyOf(s) > s.par.max);
-  const short = total < vendor.minOrder;
+  const short = total < props.sched.prefs.minOrder;
   const modeLabel = mode === "max" ? "Order to Max" : "Velocity-based";
 
   return (
@@ -959,7 +481,11 @@ function OrderBuilder(props: Ctx & { submit: (lines: OrderLine[], mode: string, 
           <Toggle label="Hide zero lines" value={hideZero} onChange={setHideZero} />
           <Button variant="quiet" label="Reset to suggestions" onClick={() => setOver({})} />
         </div>
-        <div style={small}>Lead time {vendor.leadDays} days · minimum order {money0(vendor.minOrder)} · terms {vendor.terms}</div>
+        <div style={small}>Lead time {vendor.leadDays} days · minimum order {money0(props.sched.prefs.minOrder)} · terms {vendor.terms}</div>
+        <Callout tone="info" lead="Delivery schedule:">
+          {props.sched.prefs.frequency} on {props.sched.prefs.deliveryDay} {props.sched.prefs.window} (Retailers tab). Next expected delivery {fdw(props.sched.next)}; order by {fdw(props.sched.orderBy)}.
+          The velocity review period defaults to the delivery interval ({FREQ_DAYS[props.sched.prefs.frequency]} days).
+        </Callout>
         <Table
           columns={["SKU", "Product", "Q.O.H.", "Min / Max", "On order", "Units/day", "Cover", "Suggested", "Order qty", "Line total", "How it's calculated"]}
           align={["start", "start", "end", "end", "end", "end", "end", "end", "end", "end", "start"]}
@@ -983,7 +509,7 @@ function OrderBuilder(props: Ctx & { submit: (lines: OrderLine[], mode: string, 
           <Properties items={[
             { label: "Lines / units", value: `${lines.length} lines · ${units} units` },
             { label: "Order total (cost)", value: money(total) },
-            { label: "Minimum order", value: short ? <Status tone="warning">{`${money(vendor.minOrder - total)} short of ${money0(vendor.minOrder)}`}</Status> : <Status tone="success">Met</Status> },
+            { label: "Minimum order", value: short ? <Status tone="warning">{`${money(props.sched.prefs.minOrder - total)} short of ${money0(props.sched.prefs.minOrder)}`}</Status> : <Status tone="success">Met</Status> },
             { label: "Case packs", value: caseIssues.length ? <Status tone="warning">{`${caseIssues.length} line(s) not in full cases`}</Status> : <Status tone="success">All full cases</Status> },
             { label: "Max check", value: overMax.length ? <Status tone="warning">{`${overMax.length} line(s) would exceed Max`}</Status> : <Status tone="success">Within Max</Status> },
             { label: "Method", value: modeLabel },
@@ -1079,8 +605,9 @@ const HOW_STEPS = [
   { title: "Vendor: choose a location and review reports", detail: "Q.O.H., Par Levels (Min / Max / Max Strains), Category Insights, Invoice Logs and Email Settings, modeled on a typical vendor portal." },
   { title: "Vendor: build and submit an order", detail: "Suggested quantities come from Order to Max or velocity + lead time + safety stock, rounded to case packs and checked against the minimum order." },
   { title: "Retailer: approve, adjust, counter or reject", detail: "Edit line quantities, add notes, and watch the approval SLA age on each order." },
-  { title: "Vendor: ship", detail: "Pick a carrier and ETA; a manifest number is generated." },
-  { title: "Retailer: receive", detail: "Record received and damaged units. Accepted units update Q.O.H., an invoice is generated, and the vendor sees it in Invoice Logs." },
+  { title: "Vendor: ship", detail: "Pick a carrier and ETA; a Metrc transfer manifest with package tags is created through the integrations layer (mock)." },
+  { title: "Retailer: receive", detail: "Record received and damaged units. Metrc receives the transfer, Dutchie inventory increases, and QuickBooks gets an invoice (vendor) and a bill (retailer)." },
+  { title: "Explore", detail: "Retailer: Inventory (Dutchie-style menu), Finance, Vendors accounts and Integrations. Vendor: Retailers accounts and Integrations. All provider calls are mocked; see the sync log." },
 ];
 
 export default function ParLevelPortal() {
@@ -1098,8 +625,18 @@ export default function ParLevelPortal() {
   const [histSel, setHistSel] = useState<string>("");
   const [clock, setClock] = useState(BASE);
   const [inv, setInv] = useState<InvMap>(() => seedInventory());
-  const [orders, setOrders] = useState<Order[]>(() => seedOrders());
-  const [invoices, setInvoices] = useState<Invoice[]>(() => seedInvoices(seedOrders()));
+  const [seeded] = useState(() => { const o = seedOrders(); return withExternalIds(o, seedInvoices(o)); });
+  const [orders, setOrders] = useState<Order[]>(seeded.orders);
+  const [invoices, setInvoices] = useState<Invoice[]>(seeded.invoices);
+  const [menu, setMenu] = useState<Record<string, DutchieInventoryItem[]>>({});
+  const [dutchieAt, setDutchieAt] = useState<number>();
+  const [dutchieSyncing, setDutchieSyncing] = useState(false);
+  const [rPrefs, setRPrefs] = useState<Record<string, AccountPrefs>>(seedRetailerPrefs);
+  const [rNotes, setRNotes] = useState<Record<string, AccountNote[]>>(seedRetailerNotes);
+  const [vContacts, setVContacts] = useState<Record<string, Contact[]>>(seedVendorContacts);
+  const [vPrefs, setVPrefs] = useState<Record<string, AccountPrefs>>(seedVendorPrefs);
+  const [vNotes, setVNotes] = useState<Record<string, AccountNote[]>>(seedVendorNotes);
+  const [lContacts, setLContacts] = useState<Record<string, Contact[]>>(seedLocationContacts);
   const [log, setLog] = useState<LogEntry[]>(() => seedLog());
   const [emails, setEmails] = useState<Record<string, { report: string[]; alert: string[] }>>(() =>
     Object.fromEntries(VENDORS.map((v) => [v.id, { report: v.emails, alert: v.emails.slice(0, 1) }])));
@@ -1119,6 +656,33 @@ export default function ParLevelPortal() {
     return n;
   };
   const addLog = (at: number, actor: string, vendorId: string | null, text: string) => setLog((l) => [{ at, actor, vendorId, text }, ...l]);
+  /** Q.O.H. and the retail menu come from Dutchie: pull every location and apply quantities to vendor SKUs. */
+  const syncDutchie = async () => {
+    setDutchieSyncing(true);
+    try {
+      const res = await Promise.all(LOCS.map((l) => integrations.dutchie.getInventory(l.id)));
+      const byLoc = Object.fromEntries(LOCS.map((l, i) => [l.id, res[i]]));
+      setMenu(byLoc);
+      setInv((m) => {
+        const n = { ...m };
+        for (const l of LOCS) for (const it of byLoc[l.id]) {
+          const k = `${l.id}|${it.productId}`;
+          if (n[k] && PRODUCT[it.productId]) n[k] = { ...n[k], qoh: it.quantityAvailable };
+        }
+        return n;
+      });
+      setDutchieAt(Date.now());
+    } catch { /* failure is recorded in the sync log */ } finally { setDutchieSyncing(false); }
+  };
+  useEffect(() => {
+    void syncDutchie();
+    const id = setInterval(() => void syncDutchie(), 60_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const llSync = (o: Order | undefined, input: Omit<Parameters<typeof integrations.leaflink.syncOrder>[0], "number">) => {
+    if (o?.leaflinkNumber) integrations.leaflink.syncOrder({ number: o.leaflinkNumber, ...input }).catch(() => undefined);
+  };
   const upd = (id: string, f: (o: Order) => Order) => setOrders((os) => os.map((o) => (o.id === id ? f(o) : o)));
   const vname = (id: string) => VENDOR_BY_ID[orders.find((o) => o.id === id)?.vendorId ?? "hmz"].name;
   const vidOf = (id: string) => orders.find((o) => o.id === id)?.vendorId ?? null;
@@ -1133,6 +697,7 @@ export default function ParLevelPortal() {
         notes: note ? [...x.notes, { by: RETAILER, text: note, at }] : x.notes,
       }));
       addLog(at, RETAILER, vidOf(id), `${id} approved${changed ? " with changes" : ""}`);
+      llSync(o, { transition: "accept", line_items: o?.lines.map((l) => ({ sku: l.sku, quantity: qty[l.sku] ?? l.approved })), comment: note || undefined });
     },
     counter: (id, qty, note) => {
       const at = tick();
@@ -1141,22 +706,36 @@ export default function ParLevelPortal() {
         notes: [...x.notes, { by: RETAILER, text: note || "Counter-proposal: see adjusted quantities.", at }],
       }));
       addLog(at, RETAILER, vidOf(id), `Counter-proposal sent on ${id}`);
+      const o = orders.find((x) => x.id === id);
+      llSync(o, { line_items: o?.lines.map((l) => ({ sku: l.sku, quantity: qty[l.sku] ?? l.approved })), comment: note || "Counter-proposal: see adjusted quantities." });
     },
     reject: (id, note) => {
       const at = tick();
       upd(id, (x) => ({ ...x, status: "Rejected", rejectedAt: at, notes: note ? [...x.notes, { by: RETAILER, text: note, at }] : x.notes }));
       addLog(at, RETAILER, vidOf(id), `${id} rejected`);
+      llSync(orders.find((x) => x.id === id), { transition: "reject", comment: note || undefined });
     },
     acceptCounter: (id) => {
       const at = tick();
       upd(id, (x) => ({ ...x, status: "Approved", approvedAt: at, notes: [...x.notes, { by: vname(id), text: "Accepted the counter-proposal.", at }] }));
       addLog(at, vname(id), vidOf(id), `Counter-proposal accepted on ${id}; order approved`);
+      llSync(orders.find((x) => x.id === id), { transition: "accept", comment: "Accepted the counter-proposal." });
     },
     ship: (id, carrier, etaDays) => {
       const at = tick();
-      const manifest = `MNF-2610-${id.slice(3)}${String(Math.floor(h(id + at) * 90 + 10))}`;
-      upd(id, (x) => ({ ...x, status: "Shipped", shippedAt: at, carrier, manifest, etaAt: at + etaDays * DAY }));
-      addLog(at, vname(id), vidOf(id), `${id} shipped via ${carrier.toLowerCase()}, manifest ${manifest}`);
+      const o = orders.find((x) => x.id === id);
+      if (!o) return;
+      upd(id, (x) => ({ ...x, status: "Shipped", shippedAt: at, carrier, manifest: "pending (Metrc)", etaAt: at + etaDays * DAY }));
+      addLog(at, vname(id), vidOf(id), `${id} shipped via ${carrier.toLowerCase()}; creating Metrc transfer manifest`);
+      integrations.metrc.createTransferManifest({
+        shipperLicense: VENDOR_LICENSE[o.vendorId], recipientLicense: LOC_LICENSE[o.locId], recipientName: `${RETAILER} · ${LOC_NAME[o.locId]}`, invoiceNumber: id,
+        estimatedDeparture: new Date(at).toISOString(), estimatedArrival: new Date(at + etaDays * DAY).toISOString(), transporter: carrier,
+        packages: o.lines.filter((l) => l.approved > 0).map((l) => ({ sku: l.sku, itemName: PRODUCT[l.sku].name, quantity: l.approved, unitOfMeasure: "Each" as const, wholesalePrice: l.unitCost })),
+      }).then((tr) => {
+        upd(id, (x) => ({ ...x, manifest: tr.manifestNumber, metrcTransferId: tr.id, lines: x.lines.map((l) => ({ ...l, packageLabel: tr.packages.find((p) => p.sku === l.sku)?.label })) }));
+        addLog(at, vname(id), vidOf(id), `Metrc manifest ${tr.manifestNumber} created for ${id} (${tr.packages.length} tagged packages)`);
+        if (o.leaflinkNumber) integrations.leaflink.syncOrder({ number: o.leaflinkNumber, transition: "ship", comment: `Metrc manifest ${tr.manifestNumber}` }).catch(() => undefined);
+      }).catch(() => upd(id, (x) => ({ ...x, manifest: "Metrc manifest failed (see Integrations)" })));
     },
     receive: (id, rec, note) => {
       const at = tick();
@@ -1186,6 +765,29 @@ export default function ParLevelPortal() {
         notes: note ? [...x.notes, { by: RETAILER, text: note, at }] : x.notes,
       }));
       addLog(at, RETAILER, o.vendorId, `${id} received at ${LOC_NAME[o.locId]}${issues.length ? " with discrepancies" : ""}; ${invId} generated for ${money(amount)}`);
+      void (async () => {
+        try {
+          const accepted = lines.map((l) => ({ l, n: Math.max(0, l.received - l.damaged) }));
+          if (o.manifest && /^\d+$/.test(o.manifest)) {
+            await integrations.metrc.receiveTransfer({ recipientLicense: LOC_LICENSE[o.locId], manifestNumber: o.manifest,
+              packages: lines.filter((l) => l.packageLabel).map((l) => ({ label: l.packageLabel ?? "", accepted: Math.max(0, l.received - l.damaged), rejected: Math.max(0, l.approved - l.received) + l.damaged, reason: l.damaged ? "Damaged" : undefined })) });
+            const dmg = lines.filter((l) => l.damaged > 0 && l.packageLabel);
+            if (dmg.length) await integrations.metrc.adjustPackages(LOC_LICENSE[o.locId], dmg.map((l) => ({ label: l.packageLabel ?? "", quantity: -l.damaged, unitOfMeasure: "Each" as const, reason: "Damage (reason name to confirm)", date: isoDate(at) })));
+          }
+          const r = await integrations.dutchie.receiveInventory({ locationId: o.locId, vendorId: o.vendorId, vendorLicense: VENDOR_LICENSE[o.vendorId], deliveredBy: o.carrier ?? "", deliveredOn: new Date(at).toISOString(),
+            transactionId: o.manifest ?? id, orderTitle: id, externalId: id, items: accepted.filter((x) => x.n > 0).map((x) => ({ productId: x.l.sku, quantity: x.n, unitType: "Each" as const, packageId: x.l.packageLabel, cost: x.l.unitCost })) });
+          upd(id, (x) => ({ ...x, dutchieReceiveId: r.receiveId }));
+          void syncDutchie();
+          const qLines = accepted.filter((x) => x.n > 0).map((x) => ({ description: `${x.l.sku} ${PRODUCT[x.l.sku].name}`, qty: x.n, unitPrice: x.l.unitCost, amount: Math.round(x.n * x.l.unitCost * 100) / 100 }));
+          const due = isoDate(at + (Number(VENDOR_BY_ID[o.vendorId].terms.replace(/\D/g, "")) || 14) * DAY);
+          const [qi, qb] = await Promise.all([
+            integrations.quickbooks.createInvoice({ companyId: QBO_COMPANY.vendor(o.vendorId), customerName: `${RETAILER} · ${LOC_NAME[o.locId]}`, docNumber: invId, txnDate: isoDate(at), dueDate: due, lines: qLines }),
+            integrations.quickbooks.createBill({ companyId: QBO_COMPANY.retailer, vendorName: VENDOR_BY_ID[o.vendorId].name, docNumber: invId, txnDate: isoDate(at), dueDate: due, lines: qLines }),
+          ]);
+          setInvoices((is) => is.map((i) => (i.id === invId ? { ...i, qboInvoiceId: qi.Id, qboBillId: qb.Id } : i)));
+          if (o.leaflinkNumber) await integrations.leaflink.syncOrder({ number: o.leaflinkNumber, transition: "complete" });
+        } catch { /* recorded in the sync log */ }
+      })();
     },
     note: (id, by, text) => {
       const at = tick();
@@ -1197,17 +799,38 @@ export default function ParLevelPortal() {
     const at = tick();
     const num = 1059 + orders.filter((o) => Number(o.id.slice(3)) >= 1059).length;
     const id = `PO-${num}`;
-    setOrders((os) => [{ id, vendorId: vendor.id, locId: loc, status: "Pending", lines, mode, submittedAt: at, notes: note ? [{ by: vendor.name, text: note, at }] : [] }, ...os]);
+    const value = lineSum(lines, (l) => l.approved);
+    const auto = rPrefs[vendor.id].autoApproveUnder > 0 && value < rPrefs[vendor.id].autoApproveUnder && rPrefs[vendor.id].status === "Active";
+    setOrders((os) => [{ id, vendorId: vendor.id, locId: loc, status: auto ? "Approved" : "Pending", approvedAt: auto ? at : undefined, lines, mode, submittedAt: at,
+      notes: [...(note ? [{ by: vendor.name, text: note, at }] : []), ...(auto ? [{ by: RETAILER, text: `Auto-approved: under the ${money0(rPrefs[vendor.id].autoApproveUnder)} limit set in Vendors → ${vendor.name} → Preferences.`, at }] : [])] }, ...os]);
     addLog(at, vendor.name, vendor.id, `${id} submitted for approval (${LOC_NAME[loc]}, ${mode})`);
+    if (auto) addLog(at, RETAILER, vendor.id, `${id} auto-approved (${money(value)} under ${money0(rPrefs[vendor.id].autoApproveUnder)})`);
+    integrations.leaflink.createOrder({
+      external_id_buyer: id, seller: vendor.name, customer: `${RETAILER} · ${LOC_NAME[loc]}`, locationId: loc, payment_term: vendor.terms, notes: note || undefined,
+      line_items: lines.map((l) => ({ product: PRODUCT[l.sku].name, sku: l.sku, quantity: l.requested, ordered_unit_price: { amount: l.unitCost, currency: "USD" as const } })),
+    }).then((ll) => {
+      upd(id, (x) => ({ ...x, leaflinkNumber: ll.number }));
+      if (auto) integrations.leaflink.syncOrder({ number: ll.number, transition: "accept", comment: "Auto-approved by store rule" }).catch(() => undefined);
+    }).catch(() => undefined);
     setOrderFilter("open");
     setVtab("orders");
   };
   const pay = (id: string) => {
     const at = tick();
-    setInvoices((is) => is.map((i) => (i.id === id ? { ...i, payments: [...i.payments, { at, amount: balOf(i) }] } : i)));
     const i = invoices.find((x) => x.id === id);
-    if (i) addLog(at, RETAILER, i.vendorId, `Payment of ${money(balOf(i))} recorded on ${id}`);
+    if (!i) return;
+    const amount = balOf(i);
+    setInvoices((is) => is.map((x) => (x.id === id ? { ...x, payments: [...x.payments, { at, amount }] } : x)));
+    addLog(at, RETAILER, i.vendorId, `Payment of ${money(amount)} recorded on ${id}`);
+    integrations.quickbooks.recordPayment({ docNumber: id, amount, txnDate: isoDate(at), payType: "Check", vendorCompanyId: QBO_COMPANY.vendor(i.vendorId), retailerCompanyId: QBO_COMPANY.retailer })
+      .then((r) => setInvoices((is) => is.map((x) => (x.id === id ? { ...x, payments: x.payments.map((p) => (p.at === at ? { ...p, qboPaymentId: r.paymentId, qboBillPaymentId: r.billPaymentId } : p)) } : x))))
+      .catch(() => undefined);
+    // Historical invoices may reference orders outside the loaded window; their LeafLink number is derived the same way.
+    const llNumber = orders.find((x) => x.id === i.orderId)?.leaflinkNumber ?? leaflinkNumberFor(i.orderId);
+    integrations.leaflink.recordOrderPayment(llNumber, amount, isoDate(at)).catch(() => undefined);
   };
+  const noteFor = (author: string, text: string): AccountNote => ({ id: `n-${Date.now()}-${Math.floor(Math.random() * 1e6)}`, at: tick(), author, text });
+  const prefSummary = (p: AccountPrefs) => `${p.frequency}, ${p.deliveryDay} ${p.window}${p.appointmentRequired ? ", appointment required" : ""}`;
 
   const switchAccount = () => { setAccount(""); setPickAcct(""); setLoc(""); setPickLoc(""); setStage("signin"); setVtab("dash"); setRtab("overview"); };
   const isRetailer = account === "retailer";
@@ -1294,6 +917,9 @@ export default function ParLevelPortal() {
       return null;
     })).filter((x): x is NonNullable<typeof x> => x !== null).sort((a, b) => a.c - b.c);
     const myInv = invoices.filter((i) => i.vendorId === vendor.id && i.locId === loc);
+    const vp = vPrefs[accKey(vendor.id, loc)];
+    const vs = schedule(vp, vendor.leadDays, clock, lastDelivery(vendor.id, loc, orders, inv), openEta(vendor.id, loc, orders));
+    const locAccounts: AccountSpec[] = LOCS.map((l) => ({ id: l.id, name: `${RETAILER} · ${l.name}`, subtitle: "Retail store · adult use", license: LOC_LICENSE[l.id], address: `${l.name} district, Oregon (sample address)`, terms: vendor.terms, leadDays: vendor.leadDays }));
     const shownOrders = myOrders.filter((o) => orderFilter === "all" ? true : orderFilter === "open" ? OPEN.includes(o.status) : !OPEN.includes(o.status))
       .sort((a, b) => b.submittedAt - a.submittedAt);
     body = (
@@ -1301,14 +927,14 @@ export default function ParLevelPortal() {
         <Segmented<VTab> value={vtab} onChange={setVtab} options={[
           { value: "dash", label: "Dashboard" }, { value: "qoh", label: "Q.O.H." }, { value: "par", label: "Par Levels" },
           { value: "insights", label: "Category Insights" }, { value: "order", label: "Suggested Order" },
-          { value: "orders", label: "Orders", count: actionable || undefined }, { value: "invoices", label: "Invoice Logs" },
-          { value: "alerts", label: "Alerts & Activity", count: alerts.length || undefined }, { value: "settings", label: "Email Settings" },
+          { value: "orders", label: "Orders", count: actionable || undefined }, { value: "invoices", label: "Invoice Logs" }, { value: "retailers", label: "Retailers" },
+          { value: "alerts", label: "Alerts & Activity", count: alerts.length || undefined }, { value: "settings", label: "Email Settings" }, { value: "integrations", label: "Integrations" },
         ]} />
         {vtab === "dash" ? <VendorDashboard {...ctx} goOrder={() => setVtab("order")} /> : null}
-        {vtab === "qoh" ? <QohTab {...ctx} /> : null}
+        {vtab === "qoh" ? <><SyncLine provider="Dutchie POS" at={dutchieAt} syncing={dutchieSyncing} onSync={() => void syncDutchie()} /><QohTab {...ctx} /></> : null}
         {vtab === "par" ? <ParTab {...ctx} /> : null}
         {vtab === "insights" ? <InsightsTab {...ctx} /> : null}
-        {vtab === "order" ? <OrderBuilder key={`${vendor.id}-${loc}`} {...ctx} submit={(l, m, n) => submitOrder(vendor, l, m, n)} /> : null}
+        {vtab === "order" ? <OrderBuilder key={`${vendor.id}-${loc}`} {...ctx} submit={(l, m, n) => submitOrder(vendor, l, m, n)} sched={{ prefs: vp, next: vs.nextDelivery, orderBy: vs.orderBy }} /> : null}
         {vtab === "orders" ? (
           <Section heading={`Your orders · all locations`} caption={`${openCount} open`}
             actions={<Segmented value={orderFilter} onChange={(v) => setOrderFilter(v === "all" ? "all" : v === "closed" ? "closed" : "open")}
@@ -1341,6 +967,33 @@ export default function ParLevelPortal() {
             </Section>
           </Grid>
         ) : null}
+        {vtab === "retailers" ? (
+          <AccountsTab role="vendor" noun="location" me={`${vendor.name} sales`} accounts={locAccounts} now={clock}
+            prefs={Object.fromEntries(LOCS.map((l) => [l.id, vPrefs[accKey(vendor.id, l.id)]]))}
+            savePrefs={(id, p) => {
+              setVPrefs((m) => ({ ...m, [accKey(vendor.id, id)]: p }));
+              const sc = schedule(p, vendor.leadDays, clock, lastDelivery(vendor.id, id, orders, inv), openEta(vendor.id, id, orders));
+              addLog(tick(), vendor.name, vendor.id, `Account preferences updated for ${LOC_NAME[id]} (${prefSummary(p)})`);
+              integrations.leaflink.updateCustomer({ customer: `${RETAILER} · ${LOC_NAME[id]}`, delivery_preferences: prefSummary(p), directions: p.instructions, next_contact_date: isoDate(sc.orderBy), status: p.status }).catch(() => undefined);
+            }}
+            notes={Object.fromEntries(LOCS.map((l) => [l.id, vNotes[accKey(vendor.id, l.id)] ?? []]))}
+            addNote={(id, text) => {
+              const n = noteFor(`${vendor.name} sales`, text);
+              setVNotes((m) => ({ ...m, [accKey(vendor.id, id)]: [...(m[accKey(vendor.id, id)] ?? []), n] }));
+              integrations.leaflink.createActivityEntry({ customer: `${RETAILER} · ${LOC_NAME[id]}`, entry: text, date: new Date(n.at).toISOString(), type: "Note", author: n.author }).catch(() => undefined);
+            }}
+            contacts={lContacts}
+            addContact={(id, c) => {
+              setLContacts((m) => ({ ...m, [id]: [...(c.primary ? (m[id] ?? []).map((x) => ({ ...x, primary: false })) : (m[id] ?? [])), c] }));
+              const [first, ...rest] = c.name.trim().split(" ");
+              integrations.leaflink.createContact({ customer: `${RETAILER} · ${LOC_NAME[id]}`, first_name: first, last_name: rest.join(" "), email: c.email, phone: c.phone, role: c.role, is_primary: c.primary }).catch(() => undefined);
+            }}
+            ordersOf={(id) => orders.filter((o) => o.vendorId === vendor.id && o.locId === id)}
+            invoicesOf={(id) => invoices.filter((i) => i.vendorId === vendor.id && i.locId === id)}
+            scheduleRows={(id) => [{ label: "", last: lastDelivery(vendor.id, id, orders, inv), eta: openEta(vendor.id, id, orders) }]}
+            sharedPrefs={() => `${prefSummary(rPrefs[vendor.id])} · receiving: ${rPrefs[vendor.id].receiving}`} />
+        ) : null}
+        {vtab === "integrations" ? <IntegrationsTab role="vendor" /> : null}
         {vtab === "settings" ? <EmailSettings vendor={vendor} lists={emails[vendor.id]} setLists={(l) => setEmails({ ...emails, [vendor.id]: l })} /> : null}
       </>
     );
@@ -1361,9 +1014,10 @@ export default function ParLevelPortal() {
       <>
         <div style={{ ...row, justifyContent: "space-between" }}>
           <Segmented<RTab> value={rtab} onChange={setRtab} options={[
-            { value: "overview", label: "Overview" }, { value: "approvals", label: "Approvals", count: pending.length || undefined },
+            { value: "overview", label: "Overview" }, { value: "inventory", label: "Inventory" }, { value: "approvals", label: "Approvals", count: pending.length || undefined },
             { value: "receiving", label: "Receiving", count: shipped.length || undefined }, { value: "belowpar", label: "Below par" },
-            { value: "orders", label: "Order history" }, { value: "invoices", label: "Invoices" }, { value: "activity", label: "Activity" },
+            { value: "orders", label: "Order history" }, { value: "invoices", label: "Invoices" }, { value: "finance", label: "Finance" }, { value: "vendors", label: "Vendors" },
+            { value: "activity", label: "Activity" }, { value: "integrations", label: "Integrations" },
           ]} />
           <Select options={[{ value: "all", label: "All locations" }, ...LOCS.map((l) => ({ value: l.id, label: l.name }))]} value={rloc} onChange={setRloc} />
         </div>
@@ -1433,6 +1087,28 @@ export default function ParLevelPortal() {
           </Section>
         ) : null}
         {rtab === "activity" ? <Section heading="Activity log"><LogTable log={log} /></Section> : null}
+        {rtab === "inventory" ? <InventoryTab items={menu} lastSync={dutchieAt} syncing={dutchieSyncing} onSync={() => void syncDutchie()} initialLoc={rloc} /> : null}
+        {rtab === "finance" ? <FinanceTab key={`fin-${rloc}`} invoices={invoices} now={clock} initialLoc={rloc} pay={pay} /> : null}
+        {rtab === "vendors" ? (
+          <AccountsTab role="retailer" noun="vendor" me="Store manager" now={clock}
+            accounts={VENDORS.map((v) => ({ id: v.id, name: v.name, subtitle: Array.from(new Set(PRODUCTS.filter((p) => p.vendorId === v.id).map((p) => p.category))).join(", "),
+              license: VENDOR_LICENSE[v.id], address: "Oregon (sample address)", terms: v.terms, leadDays: v.leadDays }))}
+            prefs={rPrefs}
+            savePrefs={(id, p) => {
+              setRPrefs((m) => ({ ...m, [id]: p }));
+              addLog(tick(), RETAILER, id, `Vendor preferences updated for ${VENDOR_BY_ID[id].name} (${prefSummary(p)}${p.autoApproveUnder ? `, auto-approve under ${money0(p.autoApproveUnder)}` : ""})`);
+              integrations.leaflink.saveBuyerPreferences({ seller: VENDOR_BY_ID[id].name, delivery_preferences: prefSummary(p), auto_approve_under: p.autoApproveUnder }).catch(() => undefined);
+            }}
+            notes={rNotes}
+            addNote={(id, text) => { const n = noteFor("Store manager", text); setRNotes((m) => ({ ...m, [id]: [...(m[id] ?? []), n] })); }}
+            contacts={vContacts}
+            addContact={(id, c) => setVContacts((m) => ({ ...m, [id]: [...(c.primary ? (m[id] ?? []).map((x) => ({ ...x, primary: false })) : (m[id] ?? [])), c] }))}
+            ordersOf={(id) => orders.filter((o) => o.vendorId === id && inLoc(o))}
+            invoicesOf={(id) => invoices.filter((i) => i.vendorId === id && inLoc(i))}
+            scheduleRows={(id) => LOCS.filter((l) => rloc === "all" || l.id === rloc).map((l) => ({ label: l.name, last: lastDelivery(id, l.id, orders, inv), eta: openEta(id, l.id, orders) }))}
+            sharedPrefs={(id) => LOCS.map((l) => `${l.name}: ${prefSummary(vPrefs[accKey(id, l.id)])}`).join(" · ")} />
+        ) : null}
+        {rtab === "integrations" ? <IntegrationsTab role="retailer" /> : null}
       </>
     );
   }
@@ -1446,6 +1122,7 @@ export default function ParLevelPortal() {
         <Steps steps={HOW_STEPS} />
         <div style={{ ...small, color: t.text.tertiary }}>Everything lives in this page's memory and resets on reload. Try: sign in as Ironic, submit the suggested order, switch to the store manager to approve it, switch back to ship, then receive it.</div>
       </Section>
+      <UpdatesSection notes={UPDATES} />
     </Page>
   );
 }

@@ -29,15 +29,31 @@ Pick an account from the dropdown and select **Enter demo**. You can sign in as 
 4. **Par Levels**: Min / Max / Max Strains per product, with View Products drill-down.
 5. **Category Insights**: category rankings by units or revenue against competitor (parody) brands, brand share, price vs units, weekly rank trend, and rank by location.
 6. **Suggested Order**: quantities computed from par and velocity. The math is shown per line: `target = velocity × (lead time + review period) + safety stock`, capped at Max, rounded up to case packs and checked against the vendor's minimum order value. Lines can be edited before you **Submit**.
-7. **Orders**: each order has a status timeline (Suggested → Submitted → Approved / Countered / Rejected → Shipped → Received). On an approved order the vendor picks a carrier and ETA, and a manifest number is generated.
+7. **Orders**: each order has a status timeline (Suggested → Submitted → Approved / Countered / Rejected → Shipped → Received). On an approved order the vendor picks a carrier and ETA, and a (mock) Metrc transfer manifest with package tags is created.
 8. **Invoice Logs**: an invoice is generated automatically when the retailer receives an order.
-9. **Alerts & Activity** and **Email Settings**: an alert feed, an audit log, and sample notification preferences.
+9. **Retailers**: one account per store (South Main, Eastgate, Riverside) with Overview / Orders / Contacts / Notes / Preferences. Delivery frequency, day and window drive the next delivery and order-by date, which also appear in Suggested Order. Notes are private to the vendor.
+10. **Alerts & Activity** and **Email Settings**: an alert feed, an audit log, and sample notification preferences.
+11. **Integrations**: provider status (Demo mode / sample data), which functions use each provider, field mapping, and the live sync log.
+
+The Q.O.H. tab shows "Last synced with Dutchie POS at …" (simulated). It refreshes every 60 s and on **Sync now**.
 
 ### Retailer role
 - **Overview**: approvals awaiting action with SLA aging (24 h target), inbound shipments, and a below-Min heatmap by vendor × location.
 - **Approvals**: approve, edit line quantities, counter-propose with a note, or reject.
 - **Receiving**: record received, short and damaged units per line. Accepted units update Q.O.H. immediately and generate an invoice, and the vendor sees the invoice in Invoice Logs.
+- **Inventory**: a Dutchie-style menu for each location, with categories (Flower → Accessories), subcategory chips, strain and brand filters, search, sorts, size options, exact quantities (units, or grams for bulk), price, THC and status against par. It shows a simulated "Last synced with Dutchie POS" line with **Sync now**.
+- **Finance**: a ledger (drawer, bank, A/R / A/P with running balance), payables aging, a sales summary with trend and Oregon tax lines, promotions, loyalty, payment mix with ATM fees, category and brand margin, and a safe log. Labeled with QuickBooks and Dutchie sync times.
+- **Vendors**: one account per vendor with search, filters and status. Account pages have Overview / Orders / Contacts / Notes / Preferences, where you can set delivery frequency, day and window, receiving, auto-approve under $X, and private notes.
+- **Integrations**: the same status, mapping and sync log views as the vendor's.
 - **Below par**, **Order history**, **Invoices** and **Activity** views.
+
+## Integrations
+
+Every action runs through a typed adapter layer (`src/integrations/`) for **Dutchie POS** (inventory, receiving, sales), **LeafLink** (orders, approvals, accounts), **Metrc** (manifests, package tags, receiving) and **QuickBooks Online** (invoice, bill, payments). The public demo only uses the mock adapters: there are no network calls and no credentials. See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for the mock/live switch, placeholder env vars, endpoints and the field mapping.
+
+## Updates
+
+"How the demo works" and a separate **Updates** dropdown sit at the bottom of every screen. Notes come from `src/updates.ts`.
 
 The demo starts with seeded orders in every state (pending, past-SLA, countered, approved, shipped, received with a discrepancy, rejected) so each screen has something to show. All state lives in memory and resets on reload.
 
@@ -51,7 +67,13 @@ The site is published with GitHub Pages from the `gh-pages` branch, which holds 
 
 ```
 src/
-  App.tsx          the demo (data generation, logic and all views)
+  App.tsx          app shell, state and actions (routed through integrations)
+  data.ts          deterministic sample data and par/suggestion logic
+  accounts.ts      account preferences, notes, contacts and delivery schedule
+  catalog/menu.ts  Dutchie-style menu model for the Inventory tab
+  integrations/    typed adapters (mock + live stubs), config, mapping, sync log
+  views/           Inventory, Finance, Accounts, Integrations, Updates
+  updates.ts       published update notes
   main.tsx         React entry; wraps the app in the theme provider
   kit/             small local UI kit used by the demo
     theme.tsx      light/dark theme object + provider (follows OS setting, toggle in header)
