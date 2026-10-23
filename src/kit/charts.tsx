@@ -39,7 +39,8 @@ export function LineChart(props: {
   const x = (i: number) => L + (n === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (n - 1));
   const y = (v: number) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
   const f = props.format ?? ((v: number) => fmtNum(v) + (props.unit ?? ""));
-  const ticks = Array.from(new Set([lo, (lo + hi) / 2, hi]));
+  const mid = (lo + hi) / 2;
+  const ticks = Array.from(new Set([lo, Number.isInteger(lo) && Number.isInteger(hi) && hi - lo <= 10 ? Math.round(mid) : mid, hi]));
   const step = Math.max(1, Math.ceil(n / 6));
   const showLegend = props.legend !== false && series.some((s) => s.label);
   return (

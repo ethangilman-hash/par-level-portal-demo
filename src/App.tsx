@@ -898,10 +898,11 @@ function InsightsTab(props: Ctx) {
         </Section>
       </Grid>
       <Grid columns={2}>
-        <Section heading="Weekly category rank" caption={`Rank by ${by} each week (1 is best)`}>
+        <Section heading="Weekly category rank" caption={`Rank by ${by} each week (#1 at top)`}>
           {rankSeries.length > 0 ? (
-            <LineChart points={WEEKS.map((w, i) => ({ label: w, value: rankSeries[0].values[i] }))} ceiling={worst} floor={1}
-              labels={[rankSeries[0].label]} lines={rankSeries.slice(1)} format={(n) => `#${Math.round(n)}`} />
+            <LineChart points={WEEKS.map((w, i) => ({ label: w, value: worst + 1 - rankSeries[0].values[i] }))} ceiling={worst} floor={1}
+              labels={[rankSeries[0].label]} lines={rankSeries.slice(1).map((s) => ({ label: s.label, values: s.values.map((v) => worst + 1 - v) }))}
+              format={(n) => `#${worst + 1 - Math.round(n)}`} />
           ) : <Text>No SKUs in this category.</Text>}
         </Section>
         <Section heading="Rank by location" caption={`Last 4 weeks, by ${by}`}>

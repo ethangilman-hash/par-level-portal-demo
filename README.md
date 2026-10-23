@@ -1,5 +1,7 @@
 # Par Level Portal Demo
 
+**Live demo:** https://ethangilman-hash.github.io/par-level-portal-demo/
+
 An interactive, front-end-only demo of a **par-level / vendor-managed inventory (VMI) portal** for a multi-location retailer. Vendors see on-hand stock against par levels at each store, build suggested orders, and ship them after the retailer approves. Everything runs in the browser from generated sample data. There is no backend, no network calls and no passwords.
 
 > **All data is fictional.** Every brand name is a parody, the retailer ("Demo Dispensary Co.") is generic, and all quantities, prices, sales and orders are generated sample data. Nothing represents a real company, product or business relationship.
@@ -10,7 +12,7 @@ Requires Node 18+ (20 recommended).
 
 ```bash
 npm install
-npm run dev        # dev server at http://localhost:5173
+npm run dev        # dev server at http://localhost:5173/par-level-portal-demo/
 npm run build      # type-check (tsc) + production build to dist/
 npm run preview    # serve the production build
 ```
@@ -40,6 +42,10 @@ Pick an account from the dropdown and select **Enter demo**. You can sign in as 
 The demo starts with seeded orders in every state (pending, past-SLA, countered, approved, shipped, received with a discrepancy, rejected) so each screen has something to show. All state lives in memory and resets on reload.
 
 **Try this:** sign in as Ironic → pick a location → Suggested Order → Submit. Then Switch account → store manager → Approvals → Approve. Switch back to Ironic → Orders → Ship. Finally, as the store manager → Receiving → Receive. Watch Q.O.H. and Invoice Logs update.
+
+## Deployment
+
+The site is published with GitHub Pages from the `gh-pages` branch, which holds the contents of `dist/` from `npm run build`. Vite's `base` is set to `/par-level-portal-demo/` so asset paths resolve under the Pages URL. To redeploy, build and push `dist/` to `gh-pages`, for example with `npx gh-pages -d dist`.
 
 ## Project layout
 
