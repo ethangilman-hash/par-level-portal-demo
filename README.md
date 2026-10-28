@@ -20,7 +20,7 @@ npm run preview    # serve the production build
 ## How the flow works
 
 ### Sign in
-Pick an account from the dropdown and select **Enter demo**. You can sign in as one of five sample vendors (Hellamidz, Myld, PoorGrown, Red Beard, Ironic) or as the retailer's store manager. There are no passwords.
+The start page has two options: **Retail log in** (the retailer's store manager) and **Vendor log in** (the Ironic demo vendor account). Click a card to enter; there are no passwords. Each role opens with a guide banner showing the suggested click path, and every tab has a one-line "what this is for" strip.
 
 ### Vendor role
 1. **Choose a location** (South Main, Eastgate or Riverside). A short "Generating Reports" step runs, then the vendor tabs appear.
@@ -57,7 +57,7 @@ Every action runs through a typed adapter layer (`src/integrations/`) for **Dutc
 
 The demo starts with seeded orders in every state (pending, past-SLA, countered, approved, shipped, received with a discrepancy, rejected) so each screen has something to show. All state lives in memory and resets on reload.
 
-**Try this:** sign in as Ironic → pick a location → Suggested Order → Submit. Then Switch account → store manager → Approvals → Approve. Switch back to Ironic → Orders → Ship. Finally, as the store manager → Receiving → Receive. Watch Q.O.H. and Invoice Logs update.
+**Try this:** Vendor log in (Ironic) → pick a location → Suggested Order → Submit. Then Switch account → Retail log in → Approvals → Approve. Switch back to Vendor log in → Orders → Ship. Finally, Retail log in → Receiving → Receive. Watch Q.O.H. and Invoice Logs update.
 
 ## Deployment
 

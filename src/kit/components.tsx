@@ -51,7 +51,7 @@ export function Section(props: { heading?: string; caption?: string; actions?: R
                   <span style={{ display: "inline-block", width: 18, transform: open ? "rotate(90deg)" : "none", transition: `transform ${t.motion.hover}` }}>›</span>
                   {props.heading}
                 </button>
-              ) : <h2 style={{ margin: 0, ...hs, fontWeight: t.weight.semibold }}>{props.heading}</h2>
+              ) : <h2 style={{ margin: 0, ...hs, fontWeight: t.weight.semibold, color: t.text.primary, ...(depth === 0 && !inCard ? { borderLeft: `4px solid ${t.fill.accent}`, paddingLeft: 10 } : {}) }}>{props.heading}</h2>
             ) : null}
             {props.caption && open ? <div style={{ ...t.font.caption, color: t.text.secondary, marginTop: 2 }}>{props.caption}</div> : null}
           </div>
@@ -84,7 +84,7 @@ export function Status(props: { tone?: StatusTone; children: ReactNode }) {
   const t = useGrokTheme();
   const c = toneColor(t, props.tone);
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 20, padding: "0 8px", borderRadius: t.radius.full, background: toneBg(t, props.tone), color: c, ...t.font.caption, fontWeight: t.weight.medium, whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 20, padding: "0 8px", borderRadius: t.radius.full, background: toneBg(t, props.tone), color: c, border: `1px solid ${c}55`, ...t.font.caption, fontWeight: t.weight.semibold, whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>
       <span style={{ width: 6, height: 6, borderRadius: 3, background: c, flex: "none" }} />
       {props.children}
     </span>
@@ -191,7 +191,7 @@ export function Table(props: { columns: readonly string[]; rows: readonly (reado
         <thead>
           <tr>
             {props.columns.map((c, i) => (
-              <th key={i} style={{ textAlign: al(i), padding: "8px 10px", color: t.text.secondary, fontWeight: t.weight.medium, borderBottom: `1px solid ${t.border.default}`, whiteSpace: "nowrap", background: t.bg.subtle }}>{c}</th>
+              <th key={i} style={{ textAlign: al(i), padding: "8px 10px", color: t.text.primary, fontWeight: t.weight.semibold, borderBottom: `1px solid ${t.border.strong}`, whiteSpace: "nowrap", background: t.fill.secondary }}>{c}</th>
             ))}
           </tr>
         </thead>
@@ -221,7 +221,7 @@ const btnBase = (t: GrokTheme): CSSProperties => ({
 export function Button(props: { label: string; onClick: () => void; variant?: "primary" | "quiet"; disabled?: boolean }) {
   const t = useGrokTheme();
   const s: CSSProperties = { ...btnBase(t) };
-  if (props.variant === "primary") Object.assign(s, { background: t.fill.accent, color: t.text.onColor, border: `1px solid ${t.fill.accent}` });
+  if (props.variant === "primary") Object.assign(s, { background: t.fill.accent, color: t.text.onColor, border: `1px solid ${t.fill.accent}`, fontWeight: t.weight.semibold, boxShadow: "0 1px 2px rgba(37,99,235,0.3)" });
   if (props.variant === "quiet") Object.assign(s, { background: "transparent", border: "1px solid transparent", color: t.text.accent, padding: "4px 8px" });
   if (props.disabled) Object.assign(s, { opacity: 0.45, cursor: "not-allowed" });
   return <button type="button" style={s} disabled={props.disabled} onClick={props.onClick}>{props.label}</button>;
@@ -283,14 +283,14 @@ export function Segmented<T extends string = string>(props: { options: readonly 
   const t = useGrokTheme();
   const opts = props.options.map((o): SegmentedOption<T> => (typeof o === "string" ? { value: o, label: o } : o));
   return (
-    <div style={{ display: "inline-flex", flexWrap: "wrap", gap: 2, padding: 3, borderRadius: t.radius.md, background: t.fill.secondary }}>
+    <div style={{ display: "inline-flex", flexWrap: "wrap", gap: 2, padding: 3, borderRadius: t.radius.md, background: t.fill.secondary, border: `1px solid ${t.border.default}` }}>
       {opts.map((o) => {
         const on = o.value === props.value;
         return (
           <button key={o.value} type="button" onClick={() => props.onChange(o.value)}
-            style={{ all: "unset", cursor: "pointer", padding: "6px 12px", borderRadius: t.radius.sm + 2, ...t.font.label, fontWeight: on ? t.weight.semibold : t.weight.medium, color: on ? t.text.primary : t.text.secondary, background: on ? t.bg.elevated : "transparent", boxShadow: on ? "0 1px 2px rgba(0,0,0,0.12)" : "none" }}>
+            style={{ all: "unset", cursor: "pointer", padding: "6px 12px", borderRadius: t.radius.sm + 2, ...t.font.label, fontWeight: on ? t.weight.semibold : t.weight.medium, color: on ? t.text.onColor : t.text.primary, background: on ? t.fill.accent : "transparent", boxShadow: on ? "0 1px 3px rgba(37,99,235,0.35)" : "none" }}>
             {o.label}
-            {o.count ? <span style={{ marginLeft: 6, padding: "0 6px", borderRadius: 9, background: t.fill.accent, color: t.text.onColor, ...t.font.caption }}>{o.count}</span> : null}
+            {o.count ? <span style={{ marginLeft: 6, padding: "0 6px", borderRadius: 9, background: on ? t.bg.elevated : t.fill.accent, color: on ? t.text.accent : t.text.onColor, fontWeight: t.weight.semibold, ...t.font.caption }}>{o.count}</span> : null}
           </button>
         );
       })}
