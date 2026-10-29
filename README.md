@@ -91,4 +91,4 @@ Sample data is re-rolled on every sign-in (Retail log in / Vendor log in, includ
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Private demo. All rights reserved.
