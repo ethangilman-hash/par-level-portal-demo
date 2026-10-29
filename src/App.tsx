@@ -91,9 +91,11 @@ interface Actions {
   note: (id: string, by: string, text: string) => void;
 }
 
-function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: number; inv: InvMap; act: Actions }) {
+function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: number; inv: InvMap; act: Actions; collapsible?: boolean; defaultOpen?: boolean }) {
   const { order: o, role, now, inv, act } = props;
   const { t, small, strong, row } = useStyles();
+  const [open, setOpen] = useState(props.defaultOpen ?? true);
+  const big: CSSProperties = { ...strong, fontSize: t.font.heading3.fontSize, lineHeight: t.font.heading3.lineHeight };
   const v = VENDOR_BY_ID[o.vendorId];
   const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(o.lines.map((l) => [l.sku, String(l.approved)])));
   const [rec, setRec] = useState<Record<string, { r: string; d: string }>>(() =>
@@ -162,17 +164,26 @@ function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: numb
 
   return (
     <Card>
-      <div style={{ ...row, justifyContent: "space-between" }}>
+      <div style={{ ...row, justifyContent: "space-between" }} data-testid={`order-card-${o.id}`}>
         <div style={row}>
-          <span style={strong}>{o.id}</span>
+          {props.collapsible ? (
+            <button type="button" aria-expanded={open} aria-label={open ? `Collapse ${o.id}` : `Expand ${o.id}`} onClick={() => setOpen(!open)}
+              style={{ all: "unset", cursor: "pointer", width: 22, textAlign: "center", color: t.text.secondary, fontSize: 14 }}>{open ? "▾" : "▸"}</button>
+          ) : null}
+          <span style={big}>{o.id}</span>
+          <span style={{ ...big, color: t.text.accent }} data-testid="order-vendor">{v.name}</span>
           <Status tone={STATUS_TONE[o.status]}>{o.status === "Pending" ? "Pending approval" : o.status}</Status>
           {sla}
         </div>
         <div style={row}>
-          <span style={small}>{v.name} → {LOC_NAME[o.locId]}</span>
-          <span style={strong}>{money(total)}</span>
+          <span style={small}>→ {LOC_NAME[o.locId]} · {o.lines.length} line{o.lines.length === 1 ? "" : "s"}</span>
+          <span style={big}>{money(total)}</span>
         </div>
       </div>
+      {props.collapsible && !open ? null : body()}
+    </Card>
+  );
+  function body() { return (<>
       <Timeline order={o} />
       <Table columns={columns} rows={rows} align={columns.map((c, i) => (i >= 2 && c !== "Product" ? "end" : "start"))} />
       {o.discrepancy ? <Callout tone="warning" lead="Receiving discrepancy">{o.discrepancy}</Callout> : null}
@@ -228,8 +239,7 @@ function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: numb
         {role === "retailer" && o.status === "Approved" ? <span style={small}>Approved; waiting for {v.name} to ship.</span> : null}
         {role === "vendor" && o.status === "Shipped" ? <span style={small}>In transit; {RETAILER} will confirm receipt.</span> : null}
       </div>
-    </Card>
-  );
+  </>); }
 }
 
 // ─────────────────────────── vendor views ───────────────────────────
@@ -643,6 +653,9 @@ export default function ParLevelPortal() {
   const [rloc, setRloc] = useState<string>("all");
   const [orderFilter, setOrderFilter] = useState<"open" | "all" | "closed">("open");
   const [histSel, setHistSel] = useState<string>("");
+  const [apprQ, setApprQ] = useState("");
+  /** Default state of approval order rows; open (expanded) unless the retailer switches it. */
+  const [apprView, setApprView] = useState<"expanded" | "collapsed">("expanded");
   const [clock, setClock] = useState(BASE);
   const [inv, setInv] = useState<InvMap>(() => seedInventory());
   const [seeded] = useState(() => { const o = seedOrders(); return withExternalIds(o, seedInvoices(o)); });
@@ -1164,7 +1177,26 @@ export default function ParLevelPortal() {
         ) : null}
         {rtab === "orders" && ordSub === "approvals" ? (
           <Section heading="Approval queue" caption="Oldest first. Lines show Q.O.H. and par at the receiving location.">
-            {pending.length ? pending.map((o) => <OrderCard key={`${o.id}-${o.status}`} order={o} role="retailer" now={clock} inv={inv} act={act} />) : <Callout tone="success">No orders are waiting for approval.</Callout>}
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 12, alignItems: "end" }}>
+              <Input label="Search approvals" value={apprQ} onChange={setApprQ} placeholder="Vendor, PO #, location, product or SKU" />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={small}>Order rows open by default</span>
+                <Segmented<"expanded" | "collapsed"> value={apprView} onChange={setApprView} options={[{ value: "expanded", label: "Expanded" }, { value: "collapsed", label: "Collapsed" }]} />
+              </div>
+            </div>
+            {(() => {
+              const needle = apprQ.trim().toLowerCase();
+              const shown = needle ? pending.filter((o) => [o.id, VENDOR_BY_ID[o.vendorId].name, LOC_NAME[o.locId], o.status, o.mode, ...o.lines.flatMap((l) => [l.sku, PRODUCT[l.sku].name])]
+                .join(" ").toLowerCase().includes(needle)) : pending;
+              if (!pending.length) return <Callout tone="success">No orders are waiting for approval.</Callout>;
+              return (
+                <>
+                  {needle ? <span style={small} data-testid="approvals-count">{shown.length} of {pending.length} waiting orders match “{apprQ.trim()}”</span> : null}
+                  {shown.length ? shown.map((o) => <OrderCard key={`${o.id}-${o.status}-${apprView}`} order={o} role="retailer" now={clock} inv={inv} act={act} collapsible defaultOpen={apprView === "expanded"} />)
+                    : <Callout tone="info">No waiting order matches “{apprQ.trim()}”. Check Order history for orders that were already approved, shipped or received.</Callout>}
+                </>
+              );
+            })()}
           </Section>
         ) : null}
         {rtab === "orders" && ordSub === "receiving" ? (
