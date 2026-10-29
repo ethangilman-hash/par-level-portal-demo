@@ -50,10 +50,10 @@ function subOf(name: string, cat: MenuCategory, given: string, bulk: boolean, pr
       if (n.includes("thca")) return "THCa";
       if (n.includes("budder") || n.includes("badder") || n.includes("sugar")) return "Badder & sugar";
       return "Cured resin";
-    case "Edibles": return n.includes("chocolate") ? "Chocolates" : n.includes("gumm") || n.includes("pearls") ? "Gummies" : "Chews";
+    case "Edibles": return n.includes("soda") || n.includes("syrup") ? "Drinks & syrups" : n.includes("chocolate") ? "Chocolates" : n.includes("gumm") || n.includes("pearls") ? "Gummies" : "Chews";
     case "Tinctures": return n.includes("cbd") || n.includes("cbg") || n.includes(":") ? "Ratio tinctures" : "THC tinctures";
     case "Topicals": return n.includes("patch") ? "Patches" : n.includes("balm") ? "Balms" : n.includes("roller") ? "Rollers" : "Bath & body";
-    default: return "Batteries";
+    default: return n.includes("chamber") ? "Hardware" : n.includes("deck") || n.includes("shirt") ? "Merch" : "Batteries";
   }
 }
 function strainGroupsOf(strain: string, name: string): StrainFilter[] {
@@ -121,6 +121,12 @@ export const menuBrands = (): string[] => Array.from(new Set(MENU.map((m) => m.b
 
 /** Weekly unit sales (last 4-week average) for a product at a location. */
 export const weeklyUnits = (key: string, loc: string): number => last4(SALES[key][loc]);
+
+/** Last sale of a menu option at a store: roughly one sales interval back (7 / weekly units), never after `now`. Null = never sold. */
+export function lastSoldAt(optionId: string, loc: string, velocity: number, now: number): number | null {
+  const gapDays = velocity > 0 ? Math.min(21, (7 / velocity) * (0.2 + 1.6 * h(optionId + loc + "ls"))) : 30 + 30 * h(optionId + "old");
+  return velocity <= 0.05 && h(optionId + loc + "never") < 0.3 ? null : now - gapDays * 86400000 - h(optionId + loc + "hr") * 6 * 3600000;
+}
 
 /** Par for a menu option: vendor SKUs use the vendor par plan; other options get a sample par from velocity. */
 export function optionPar(loc: string, optionId: string): ParLevel {

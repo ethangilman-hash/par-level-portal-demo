@@ -5,3 +5,5 @@ dist
 *.log
 menu_sample.json
 *.tsbuildinfo
+full.json
+docs/PARODY_MAP.md

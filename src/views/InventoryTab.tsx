@@ -2,8 +2,8 @@
 // dense checkbox table and a pagination footer. Quantities come from the Dutchie adapter; velocity is sample sales data.
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "../kit";
 import { useStyles, SyncLine } from "../ui";
-import { ITEM, LOCS, LOC_NAME, VENDOR_BY_ID, BASE, h, money } from "../data";
-import { MENU_BY_KEY, MENU_CATEGORIES, OPTION_OWNER, STRAIN_FILTERS, bulkPar, optionPar, weeklyUnits, type MenuCategory, type MenuProduct } from "../catalog/menu";
+import { ITEM, LOCS, LOC_NAME, VENDOR_BY_ID, VENDOR_BY_NAME, BASE, h, money } from "../data";
+import { MENU_BY_KEY, MENU_CATEGORIES, OPTION_OWNER, STRAIN_FILTERS, bulkPar, lastSoldAt, optionPar, weeklyUnits, type MenuCategory, type MenuProduct } from "../catalog/menu";
 import type { DutchieInventoryItem } from "../integrations";
 import type { RefObject } from "react";
 
@@ -13,7 +13,7 @@ const ROOMS = ["Sales Floor", "Backstock", "Vault"] as const;
 type Room = (typeof ROOMS)[number];
 const TAGS = ["Par-tracked vendor", "Below par", "Top seller", "Bulk", "Slow mover"] as const;
 type Tag = (typeof TAGS)[number];
-/** Invented parody distributors that carry the non-vendor brands. */
+/** Invented parody distributors, used only if a brand has no vendor account of its own. */
 const DISTROS = ["Cascade Canna Supply", "Rogue Valley Distro", "Willamette Wholesale", "Self-distributed"];
 
 interface InvRow {
@@ -41,9 +41,7 @@ function buildRows(items: Record<string, DutchieInventoryItem[]>, now: number): 
       const par = grams ? bulkPar(l.id, p.key) : optionPar(l.id, it.productId);
       const qty = it.quantityAvailable;
       const status: StockStatus = qty <= 0 ? "Out of stock" : qty < par.min ? "Low stock" : "In stock";
-      // Last sale: roughly one sales interval back (7 / weekly units), never in the future of the demo clock.
-      const gapDays = velocity > 0 ? Math.min(21, (7 / velocity) * (0.2 + 1.6 * h(it.productId + l.id + "ls"))) : 30 + 30 * h(it.productId + "old");
-      const lastSold = velocity <= 0.05 && h(it.productId + l.id + "never") < 0.3 ? null : now - gapDays * 86400000 - h(it.productId + l.id + "hr") * 6 * 3600000;
+      const lastSold = lastSoldAt(it.productId, l.id, velocity, now);
       const tags: Tag[] = [];
       if (p.vendorId) tags.push("Par-tracked vendor");
       if (status !== "In stock") tags.push("Below par");
@@ -53,7 +51,7 @@ function buildRows(items: Record<string, DutchieInventoryItem[]>, now: number): 
       // Cost keeps the product's wholesale margin at every size (per gram for bulk flower).
       const costRatio = p.unitCost / (ITEM[p.key]?.price || it.unitPrice || 1);
       const cost = Math.round(it.unitPrice * costRatio * 100) / 100;
-      const vendor = p.vendorId ? VENDOR_BY_ID[p.vendorId].name : DISTROS[Math.floor(h(p.brand + "distro") * DISTROS.length)];
+      const vendor = p.vendorId ? VENDOR_BY_ID[p.vendorId].name : VENDOR_BY_NAME[p.brand]?.name ?? DISTROS[Math.floor(h(p.brand + "distro") * DISTROS.length)];
       const base = {
         sku: p.vendorId ? it.sku : hexSku(it.productId), product: grams || !it.size || it.size === "Each" || p.name.toLowerCase().includes(it.size.toLowerCase()) ? p.name : `${p.name} ${it.size}`,
         size: it.size, p, brand: p.brand, vendor, loc: l.id, grams, price: it.unitPrice, cost,
@@ -81,11 +79,11 @@ function useOutside(ref: RefObject<HTMLElement>, on: boolean, close: () => void)
   }, [on, close, ref]);
 }
 
-function Chevron() {
+export function Chevron() {
   return <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style={{ marginLeft: 6 }}><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
-function Dropdown(props: { label: ReactNode; active?: boolean; variant?: "pill" | "button"; children: (close: () => void) => ReactNode; align?: "left" | "right"; width?: number; testId?: string }) {
+export function Dropdown(props: { label: ReactNode; active?: boolean; variant?: "pill" | "button"; children: (close: () => void) => ReactNode; align?: "left" | "right"; width?: number; testId?: string }) {
   const { t } = useStyles();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -112,7 +110,7 @@ function Dropdown(props: { label: ReactNode; active?: boolean; variant?: "pill" 
   );
 }
 
-function MenuItem(props: { label: string; onClick: () => void; checked?: boolean; disabled?: boolean; hint?: string }) {
+export function MenuItem(props: { label: string; onClick: () => void; checked?: boolean; disabled?: boolean; hint?: string }) {
   const { t } = useStyles();
   return (
     <button type="button" role={props.checked === undefined ? "menuitem" : "menuitemcheckbox"} aria-checked={props.checked} disabled={props.disabled} onClick={props.onClick}
@@ -356,7 +354,7 @@ export function InventoryTab(props: {
                     </td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>
                       <span style={{ fontWeight: t.weight.medium }}>{r.brand}</span>
-                      <div style={{ fontSize: 11, lineHeight: "15px", color: r.p.vendorId ? t.text.accent : t.text.secondary }}>{r.vendor === r.brand ? "Vendor (par-tracked)" : r.vendor}</div>
+                      <div style={{ fontSize: 11, lineHeight: "15px", color: r.p.vendorId ? t.text.accent : t.text.secondary }}>{r.p.vendorId ? "Vendor (par-tracked)" : r.vendor === r.brand ? "Vendor account · no par" : r.vendor}</div>
                     </td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>
                       {r.room}

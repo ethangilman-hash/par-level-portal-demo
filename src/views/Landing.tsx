@@ -10,7 +10,7 @@ export function Landing(props: { retailer: string; vendor: string; onEnter: (rol
     {
       role: "retailer", cta: "Retail log in", who: `${props.retailer} · store manager`,
       blurb: "Run the store side: see what's on the shelf, what's owed, and approve what vendors want to send.",
-      sees: ["Inventory: live menu stock vs par at each location", "Finance: payables, sales, margin and cash", "Vendors: account pages with delivery preferences and auto-approve limits", "Approvals → Receiving: approve, counter or reject orders, then check them in"],
+      sees: ["Inventory: live menu stock vs par, Below par and Performance charts", "Finance: payables, sales, margin and cash", "Vendors: an account page for every brand on the menu, with delivery preferences", "Orders: approve, counter or reject, receive shipments, order history and invoices"],
     },
     {
       role: "vendor", cta: "Vendor log in", who: `${props.vendor} · vendor sales rep`,

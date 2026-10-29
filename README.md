@@ -39,13 +39,19 @@ The Q.O.H. tab shows "Last synced with Dutchie POS at …" (simulated). It refre
 
 ### Retailer role
 - **Overview**: approvals awaiting action with SLA aging (24 h target), inbound shipments, and a below-Min heatmap by vendor × location.
-- **Approvals**: approve, edit line quantities, counter-propose with a note, or reject.
-- **Receiving**: record received, short and damaged units per line. Accepted units update Q.O.H. immediately and generate an invoice, and the vendor sees the invoice in Invoice Logs.
-- **Inventory**: a Dutchie-style menu for each location, with categories (Flower → Accessories), subcategory chips, strain and brand filters, search, sorts, size options, exact quantities (units, or grams for bulk), price, THC and status against par. It shows a simulated "Last synced with Dutchie POS" line with **Sync now**.
+- **Inventory** (sub-views):
+  - **All inventory**: a Dutchie-style inventory table per store (SKU, product, brand/vendor, room, available, price, cost, sales velocity, last date sold) with search, filters, sorting, CSV export and a simulated "Last synced with Dutchie POS" line.
+  - **Below par**: every par-tracked SKU under Min, with gap to Max, cover and open orders.
+  - **Performance**: Dutchie-style reports: a KPI strip (Gross Sales, Discounted Amount, Inventory Cost, Inventory Profit) with a period picker and a daily sales bar chart; a top-sales donut (master categories / products / brands, drill-down); a performance ranking (Master Categories, Categories, Products, Brands, Tags) with qty sold / remaining / received, gross sales, % of sales, inventory cost, margin, discounts, sales velocity and last sold; monthly sales (Jan–Oct 2026) and sales by location.
+- **Orders** (sub-views):
+  - **Approvals**: approve, edit line quantities, counter-propose with a note, or reject.
+  - **Receiving**: record received, short and damaged units per line. Accepted units update Q.O.H. immediately and generate an invoice, and the vendor sees it in Invoice Logs.
+  - **Order history**: every order, with timeline and notes.
+  - **Invoice**: invoices for received orders plus pro-forma invoices for approved / shipped orders, with a detail view (bill-to, terms, line items, payments, record payment).
 - **Finance**: a ledger (drawer, bank, A/R / A/P with running balance), payables aging, a sales summary with trend and Oregon tax lines, promotions, loyalty, payment mix with ATM fees, category and brand margin, and a safe log. Labeled with QuickBooks and Dutchie sync times.
-- **Vendors**: one account per vendor with search, filters and status. Account pages have Overview / Orders / Contacts / Notes / Preferences, where you can set delivery frequency, day and window, receiving, auto-approve under $X, and private notes.
+- **Vendors**: an account for every brand on the reference menu (parody names; the five par-tracked vendors plus the rest of the menu), with search, frequency filters and status. Account pages have Overview / Orders / Contacts / Notes / Preferences, where you can set delivery frequency (weekly / bi-weekly / monthly), day and window, receiving, auto-approve under $X, and private notes.
 - **Integrations**: the same status, mapping and sync log views as the vendor's.
-- **Below par**, **Order history**, **Invoices** and **Activity** views.
+- **Activity**: the audit log.
 
 ## Integrations
 
@@ -57,7 +63,7 @@ Every action runs through a typed adapter layer (`src/integrations/`) for **Dutc
 
 The demo starts with seeded orders in every state (pending, past-SLA, countered, approved, shipped, received with a discrepancy, rejected) so each screen has something to show. All state lives in memory and resets on reload.
 
-**Try this:** Vendor log in (Ironic) → pick a location → Suggested Order → Submit. Then Switch account → Retail log in → Approvals → Approve. Switch back to Vendor log in → Orders → Ship. Finally, Retail log in → Receiving → Receive. Watch Q.O.H. and Invoice Logs update.
+**Try this:** Vendor log in (Ironic) → pick a location → Suggested Order → Submit. Then Switch account → Retail log in → Orders → Approvals → Approve. Switch back to Vendor log in → Orders → Ship. Finally, Retail log in → Orders → Receiving → Receive. Watch Q.O.H. and Invoice Logs update.
 
 ## Deployment
 

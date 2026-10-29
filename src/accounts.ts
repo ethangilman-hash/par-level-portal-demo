@@ -1,6 +1,6 @@
 // Account management (retailer → vendor accounts, vendor → retailer location accounts):
 // preferences, contacts and private internal notes, plus the delivery schedule they drive.
-import { DAY, HOUR, LOCS, PRODUCTS, VENDORS, VENDOR_BY_ID, BASE, h, type InvMap, type Order } from "./data";
+import { DAY, HOUR, LOCS, PRODUCTS, COMPETITOR_SKUS, ALL_VENDORS, VENDORS, VENDOR_BY_ID, BASE, h, type InvMap, type Order } from "./data";
 
 export const FREQUENCIES = ["Weekly", "Bi-weekly", "Monthly"] as const;
 export type Frequency = (typeof FREQUENCIES)[number];
@@ -70,22 +70,33 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z]+/g, "");
 
 // ── retailer's view of each vendor account
 export function seedRetailerPrefs(): Record<string, AccountPrefs> {
-  return Object.fromEntries(VENDORS.map((v, i) => [v.id, {
-    status: "Active", frequency: (["Weekly", "Weekly", "Bi-weekly", "Weekly", "Bi-weekly"] as Frequency[])[i], deliveryDay: WEEKDAYS[(i * 2 + 1) % 5],
+  return Object.fromEntries(ALL_VENDORS.map((v, i) => [v.id, {
+    status: v.catalog && h(v.id + "paused") < 0.12 ? "Paused" : "Active",
+    frequency: v.catalog ? FREQUENCIES[Math.floor(h(v.id + "freq") * 3)] : (["Weekly", "Weekly", "Bi-weekly", "Weekly", "Bi-weekly"] as Frequency[])[i], deliveryDay: WEEKDAYS[(i * 2 + 1) % 5],
     window: WINDOWS[i % 3], receiving: "Back-of-house receiving bay", contactName: person(`rx${v.id}`), contactPhone: phone(`rx${v.id}`),
     instructions: "Check in at the side door; manifest and invoice must travel with the delivery.", autoApproveUnder: i === 2 ? 400 : 0, minOrder: v.minOrder,
     appointmentRequired: i % 2 === 0, paymentMethod: "ACH",
   } satisfies AccountPrefs]));
 }
 export function seedVendorContacts(): Record<string, Contact[]> {
-  return Object.fromEntries(VENDORS.map((v) => [v.id, [
+  return Object.fromEntries(ALL_VENDORS.map((v) => [v.id, [
     { name: person(`vc1${v.id}`), role: "Account manager", email: `${slug(person(`vc1${v.id}`))}@${v.id}.example`, phone: phone(`vc1${v.id}`), primary: true },
     { name: person(`vc2${v.id}`), role: "Accounts receivable", email: v.emails[v.emails.length - 1], phone: phone(`vc2${v.id}`), primary: false },
   ]]));
 }
 export function seedRetailerNotes(): Record<string, AccountNote[]> {
   const n = (vid: string, daysAgo: number, author: string, text: string): AccountNote => ({ id: `rn-${vid}-${daysAgo}`, at: BASE - daysAgo * DAY, author, text });
+  const NOTES = [
+    "Sample catalog pending: not on vendor-managed pars yet. Reorders go through the buyer.",
+    "Sample catalog pending. Rep asked about a shelf reset; revisit at the next category review.",
+    "Sample catalog pending. Prefers orders consolidated across all three stores.",
+    "Sample catalog pending. Delivers with the distro's route van; confirm manifest before signing.",
+  ];
+  const withSkus = new Set(COMPETITOR_SKUS.map((r) => r[1]));
+  const catalog = Object.fromEntries(ALL_VENDORS.filter((v) => v.catalog).map((v) => [v.id,
+    [n(v.id, 3 + Math.floor(h(v.id + "nd") * 40), "Buyer", `${withSkus.has(v.name) ? "Sample SKUs loaded in Inventory; not on vendor-managed pars yet." : NOTES[Math.floor(h(v.id + "note") * NOTES.length)]} ${v.menuCount ? `${v.menuCount} item${v.menuCount === 1 ? "" : "s"} on the menu` : "Listed on the menu"} (${(v.categories ?? []).join(", ") || "various"}).`)]]));
   return {
+    ...catalog,
     hmz: [n("hmz", 12, "Store manager", "Gummy 10-packs sell out on Fridays; ask for Thursday drops when possible.")],
     myld: [n("myld", 9, "Store manager", "Rep offered a brand-funded promo for November. Revisit before the next order.")],
     poor: [n("poor", 4, "Store manager", "Short-shipped twice in September. Count the bulk jars at the dock before signing.")],
@@ -98,13 +109,13 @@ export function seedRetailerNotes(): Record<string, AccountNote[]> {
 export const accKey = (vendorId: string, locId: string) => `${vendorId}|${locId}`;
 export function seedVendorPrefs(): Record<string, AccountPrefs> {
   const out: Record<string, AccountPrefs> = {};
-  for (const v of VENDORS) LOCS.forEach((l, i) => {
+  ALL_VENDORS.forEach((v, vi) => LOCS.forEach((l, i) => {
     out[accKey(v.id, l.id)] = {
-      status: "Active", frequency: i === 2 && v.id === "poor" ? "Bi-weekly" : "Weekly", deliveryDay: WEEKDAYS[(i + VENDORS.indexOf(v)) % 5], window: WINDOWS[(i + 1) % 3],
+      status: "Active", frequency: v.catalog ? FREQUENCIES[Math.floor(h(v.id + "freq") * 3)] : i === 2 && v.id === "poor" ? "Bi-weekly" : "Weekly", deliveryDay: WEEKDAYS[(i + vi) % 5], window: WINDOWS[(i + 1) % 3],
       receiving: ["Route A · Southside", "Route B · East", "Route C · River"][i], contactName: person(`lc${l.id}`), contactPhone: phone(`lc${l.id}`),
       instructions: "Deliver to receiving; store requires a printed manifest.", autoApproveUnder: 0, minOrder: v.minOrder, appointmentRequired: i === 1, paymentMethod: "ACH",
     };
-  });
+  }));
   return out;
 }
 export function seedLocationContacts(): Record<string, Contact[]> {

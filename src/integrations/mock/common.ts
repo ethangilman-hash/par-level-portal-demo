@@ -1,7 +1,7 @@
 import { MOCK_LATENCY_MS } from "../config";
 import { logSync } from "../syncLog";
 import type { ProviderId } from "../types";
-import { h } from "../../data";
+import { h, ALL_VENDORS } from "../../data";
 
 export interface CallMeta { provider: ProviderId; direction: "pull" | "push"; operation: string; endpoint: string; ref: string }
 
@@ -21,7 +21,8 @@ export async function mockCall<T>(meta: CallMeta, fn: () => T, summary: (r: T) =
 }
 
 /** Sample license numbers (clearly fake). */
-export const VENDOR_LICENSE: Record<string, string> = { hmz: "DEMO-PROC-0101", myld: "DEMO-PROC-0102", poor: "DEMO-PROD-0103", rbd: "DEMO-PROD-0104", iron: "DEMO-PROC-0105" };
+const PAR_LICENSE: Record<string, string> = { hmz: "DEMO-PROC-0101", myld: "DEMO-PROC-0102", poor: "DEMO-PROD-0103", rbd: "DEMO-PROD-0104", iron: "DEMO-PROC-0105" };
+export const VENDOR_LICENSE: Record<string, string> = Object.fromEntries(ALL_VENDORS.map((v, i) => [v.id, PAR_LICENSE[v.id] ?? `DEMO-${v.categories?.some((c) => c === "Flower" || c === "Pre-Rolls") ? "PROD" : v.categories?.every((c) => c === "Accessories" || c === "Apparel") ? "RETL" : "PROC"}-${String(200 + i).padStart(4, "0")}`]));
 export const LOC_LICENSE: Record<string, string> = { south: "DEMO-RET-0201", east: "DEMO-RET-0202", river: "DEMO-RET-0203" };
 
 const hex = (s: string, n: number) => Array.from({ length: n }, (_, i) => Math.floor(h(s + i) * 16).toString(16)).join("");

@@ -5,11 +5,13 @@ import {
 import type { ReactNode, CSSProperties, TableCell } from "./kit";
 
 import {
-  MENU_SKUS, COMPETITOR_SKUS, StatusToneT, Vendor, VENDORS, VENDOR_BY_ID, RETAILER, Loc, LOCS, LOC_NAME, LOC_FACTOR, WEEKS, CAT_BASE, CASE_PACK, CARRIERS, SLA_HOURS, MIN, HOUR, DAY, BASE, h, money, money0, dFmt, dtFmt, fd, fdt, toInt, ageLabel, Product, PRODUCTS, PRODUCT, Item, ITEMS, ITEM, buildSales, SALES, salesAt, last4, perDay, ParLevel, PARS, parOf, Stock, InvMap, seedInventory, OrderStatus, OrderLine, Note, Order, Invoice, LogEntry, STATUS_TONE, OPEN, ln, lineSum, orderValue, seedOrders, seedInvoices, paidOf, balOf, seedLog, onOrderQty, stockStatus, catRanks, rank4, Suggestion, SuggestOpts, suggest,
+  MENU_SKUS, COMPETITOR_SKUS, StatusToneT, Vendor, VENDORS, ALL_VENDORS, VENDOR_BY_ID, RETAILER, Loc, LOCS, LOC_NAME, LOC_FACTOR, WEEKS, CAT_BASE, CASE_PACK, CARRIERS, SLA_HOURS, MIN, HOUR, DAY, BASE, h, money, money0, dFmt, dtFmt, fd, fdt, toInt, ageLabel, Product, PRODUCTS, PRODUCT, Item, ITEMS, ITEM, buildSales, SALES, salesAt, last4, perDay, ParLevel, PARS, parOf, Stock, InvMap, seedInventory, OrderStatus, OrderLine, Note, Order, Invoice, LogEntry, STATUS_TONE, OPEN, ln, lineSum, orderValue, seedOrders, seedInvoices, paidOf, balOf, seedLog, onOrderQty, stockStatus, catRanks, rank4, Suggestion, SuggestOpts, suggest,
 } from "./data";
 import { useStyles, Card, Bar, SyncLine } from "./ui";
 import { integrations, withExternalIds, leaflinkNumberFor, LL_STATUS, VENDOR_LICENSE, LOC_LICENSE, QBO_COMPANY, isoDate, type DutchieInventoryItem } from "./integrations";
 import { InventoryTab } from "./views/InventoryTab";
+import { PerformanceTab } from "./views/PerformanceTab";
+import { InvoicesView } from "./views/InvoicesView";
 import { FinanceTab } from "./views/FinanceTab";
 import { IntegrationsTab } from "./views/IntegrationsTab";
 import { AccountsTab, fdw, type AccountSpec } from "./views/AccountsTab";
@@ -231,7 +233,11 @@ function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: numb
 
 // ─────────────────────────── vendor views ───────────────────────────
 type VTab = "dash" | "qoh" | "par" | "insights" | "order" | "orders" | "invoices" | "retailers" | "alerts" | "settings" | "integrations";
-type RTab = "overview" | "inventory" | "approvals" | "receiving" | "belowpar" | "orders" | "invoices" | "finance" | "vendors" | "activity" | "integrations";
+type RTab = "overview" | "inventory" | "orders" | "finance" | "vendors" | "activity" | "integrations";
+type InvSub = "all" | "belowpar" | "performance";
+type OrdSub = "approvals" | "receiving" | "history" | "invoices";
+/** A retailer destination: a top-level tab, or a hub tab plus its sub-view ("orders:approvals"). */
+type RNav = "overview" | "finance" | "vendors" | "activity" | "integrations" | `inventory:${InvSub}` | `orders:${OrdSub}`;
 
 interface Ctx { vendor: Vendor; loc: string; inv: InvMap; orders: Order[]; invoices: Invoice[]; now: number }
 
@@ -610,10 +616,10 @@ const HOW_STEPS = [
   { title: "Pick a role on the start page", detail: "Retail log in opens the store manager console; Vendor log in opens the Ironic vendor portal. No passwords; it's sample data." },
   { title: "Vendor: choose a store location and review reports", detail: "Q.O.H., Par Levels (Min / Max / Max Strains), Category Insights, Invoice Logs and Email Settings, modeled on a typical vendor portal." },
   { title: "Vendor: build and submit an order", detail: "Suggested quantities come from Order to Max or velocity + lead time + safety stock, rounded to case packs and checked against the minimum order." },
-  { title: "Retailer: approve, adjust, counter or reject", detail: "Switch account → Retail log in → Approvals. Edit line quantities, add notes, and watch the approval SLA age on each order." },
+  { title: "Retailer: approve, adjust, counter or reject", detail: "Switch account → Retail log in → Orders → Approvals. Edit line quantities, add notes, and watch the approval SLA age on each order." },
   { title: "Vendor: ship", detail: "Switch back to Vendor log in → Orders. Pick a carrier and ETA; a Metrc transfer manifest with package tags is created through the integrations layer (mock)." },
-  { title: "Retailer: receive", detail: "Record received and damaged units. Metrc receives the transfer, Dutchie inventory increases, and QuickBooks gets an invoice (vendor) and a bill (retailer)." },
-  { title: "Explore", detail: "Retailer: Inventory (Dutchie-style inventory table), Finance, Vendors accounts and Integrations. Vendor: Retailers accounts and Integrations. All provider calls are mocked; see the sync log." },
+  { title: "Retailer: receive", detail: "Orders → Receiving: record received and damaged units. Metrc receives the transfer, Dutchie inventory increases, and QuickBooks gets an invoice (vendor) and a bill (retailer)." },
+  { title: "Explore", detail: "Retailer: Inventory (All inventory, Below par and Performance charts), Orders (Approvals, Receiving, Order history, Invoice), Finance, Vendors (every menu brand as a vendor account) and Integrations. Vendor: Retailers accounts and Integrations. All provider calls are mocked; see the sync log." },
 ];
 
 export default function ParLevelPortal() {
@@ -625,6 +631,14 @@ export default function ParLevelPortal() {
   const [progress, setProgress] = useState(0);
   const [vtab, setVtab] = useState<VTab>("dash");
   const [rtab, setRtab] = useState<RTab>("overview");
+  const [invSub, setInvSub] = useState<InvSub>("all");
+  const [ordSub, setOrdSub] = useState<OrdSub>("approvals");
+  const rnav = (n: RNav) => {
+    const [tab, sub] = n.split(":");
+    setRtab(tab as RTab);
+    if (tab === "inventory" && sub) setInvSub(sub as InvSub);
+    if (tab === "orders" && sub) setOrdSub(sub as OrdSub);
+  };
   const [rloc, setRloc] = useState<string>("all");
   const [orderFilter, setOrderFilter] = useState<"open" | "all" | "closed">("open");
   const [histSel, setHistSel] = useState<string>("");
@@ -837,7 +851,7 @@ export default function ParLevelPortal() {
   const noteFor = (author: string, text: string): AccountNote => ({ id: `n-${Date.now()}-${Math.floor(Math.random() * 1e6)}`, at: tick(), author, text });
   const prefSummary = (p: AccountPrefs) => `${p.frequency}, ${p.deliveryDay} ${p.window}${p.appointmentRequired ? ", appointment required" : ""}`;
 
-  const switchAccount = () => { setAccount(""); setLoc(""); setPickLoc(""); setStage("signin"); setVtab("dash"); setRtab("overview"); };
+  const switchAccount = () => { setAccount(""); setLoc(""); setPickLoc(""); setStage("signin"); setVtab("dash"); setRtab("overview"); setInvSub("all"); setOrdSub("approvals"); };
   const isRetailer = account === "retailer";
   const vendor = !isRetailer && account ? VENDOR_BY_ID[account] : null;
   const ctx: Ctx | null = vendor && loc ? { vendor, loc, inv, orders, invoices, now: clock } : null;
@@ -934,7 +948,7 @@ export default function ParLevelPortal() {
             { tab: "orders", label: "3. Ship", hint: "after the retailer approves" },
             { tab: "retailers", label: "4. Manage accounts", hint: "delivery prefs, contacts" },
           ]}
-          tip={<>Approvals happen on the retailer side: after you submit, use Switch account → Retail log in → Approvals, then come back here to ship.</>} />
+          tip={<>Approvals happen on the retailer side: after you submit, use Switch account → Retail log in → Orders → Approvals, then come back here to ship.</>} />
         <Segmented<VTab> value={vtab} onChange={setVtab} options={[
           { value: "dash", label: "Dashboard" }, { value: "qoh", label: "Q.O.H." }, { value: "par", label: "Par Levels" },
           { value: "insights", label: "Category Insights" }, { value: "order", label: "Suggested Order" },
@@ -1022,43 +1036,62 @@ export default function ParLevelPortal() {
     const breached = pending.filter((o) => clock - o.submittedAt >= SLA_HOURS * HOUR).length;
     const hist = orders.filter(inLoc).sort((a, b) => b.submittedAt - a.submittedAt);
     const selOrder = hist.find((o) => o.id === histSel);
-    const rgo = (tab: RTab) => () => setRtab(tab);
-    const rHelp: Record<RTab, TabInfo> = {
-      overview: { what: "your morning check: orders waiting for approval, inbound shipments and SKUs below Min across stores.", how: "use the location picker on the right to focus on one store.", next: { label: "Approvals", go: rgo("approvals") } },
-      inventory: { what: "live inventory from Dutchie POS, laid out like Dutchie's Inventory page: SKU, product, brand/vendor, location (room), available, price, cost, sales velocity and last date sold.", how: "search, then filter by Store, Status, Vendor, Location, Category, Tags or More; click a column header to sort. Low / out-of-stock quantities are colored against par. Receive inventory opens Receiving.", next: { label: "Below par", go: rgo("belowpar") } },
-      approvals: { what: "vendor orders waiting on you, oldest first, with on-hand and par next to each line.", how: "edit quantities if needed, then Approve, Send counter-proposal or Reject. The vendor ships approved orders.", next: { label: "Receiving", go: rgo("receiving") } },
-      receiving: { what: "shipments in transit to your stores.", how: "count each line, enter shorts or damages, then Mark received. Stock goes up and an invoice is created.", next: { label: "Invoices", go: rgo("invoices") } },
-      belowpar: { what: "every SKU under its Min, across all vendors, with the gap to Max and whether it's already on order." },
-      orders: { what: "every order with every vendor. Click Details to see its timeline and notes." },
-      invoices: { what: "vendor invoices created when you receive orders.", how: "Record payment settles the balance (demo only; no money moves).", next: { label: "Finance", go: rgo("finance") } },
+    const rgo = (n: RNav) => () => rnav(n);
+    const cur: RNav = rtab === "inventory" ? `inventory:${invSub}` : rtab === "orders" ? `orders:${ordSub}` : rtab;
+    const rHelp: Record<RNav, TabInfo> = {
+      overview: { what: "your morning check: orders waiting for approval, inbound shipments and SKUs below Min across stores.", how: "use the location picker on the right to focus on one store.", next: { label: "Orders → Approvals", go: rgo("orders:approvals") } },
+      "inventory:all": { what: "live inventory from Dutchie POS, laid out like Dutchie's Inventory page: SKU, product, brand/vendor, location (room), available, price, cost, sales velocity and last date sold.", how: "search, then filter by Store, Status, Vendor, Location, Category, Tags or More; click a column header to sort. Low / out-of-stock quantities are colored against par. Receive inventory opens Orders → Receiving.", next: { label: "Below par", go: rgo("inventory:belowpar") } },
+      "inventory:belowpar": { what: "every par-tracked SKU under its Min, across all vendors, with the gap to Max and whether it's already on order.", next: { label: "Performance", go: rgo("inventory:performance") } },
+      "inventory:performance": { what: "Dutchie-style sales reports: KPIs (gross sales, discounts, inventory cost and profit), daily sales, top sales breakdown, a performance ranking with quantity received, sales velocity and last sold, plus monthly and by-location trends.", how: "pick a period on each card; click a donut row to drill into a category or brand; switch the ranking between Master Categories, Categories, Products, Brands and Tags.", next: { label: "Orders → Approvals", go: rgo("orders:approvals") } },
+      "orders:approvals": { what: "vendor orders waiting on you, oldest first, with on-hand and par next to each line.", how: "edit quantities if needed, then Approve, Send counter-proposal or Reject. The vendor ships approved orders.", next: { label: "Receiving", go: rgo("orders:receiving") } },
+      "orders:receiving": { what: "shipments in transit to your stores.", how: "count each line, enter shorts or damages, then Mark received. Stock goes up and an invoice is created.", next: { label: "Invoice", go: rgo("orders:invoices") } },
+      "orders:history": { what: "every order with every vendor. Click Details to see its timeline and notes.", next: { label: "Invoice", go: rgo("orders:invoices") } },
+      "orders:invoices": { what: "vendor invoices for received orders plus pro-forma invoices for approved and shipped orders. Click View for bill-to, terms, line items and payments.", how: "Record payment settles the balance (demo only; no money moves).", next: { label: "Finance", go: rgo("finance") } },
       finance: { what: "store finances: balance book, payables aging, sales and tax, discounts, margin by category/brand and the cash/safe log." },
-      vendors: { what: "one account page per vendor (LeafLink-style): delivery preferences, auto-approve limit, contacts and private notes.", how: "click Open account, then use the Preferences sub-tab to set delivery day and auto-approve." },
+      vendors: { what: `one account page per vendor (LeafLink-style) for every brand on the menu (${ALL_VENDORS.length} accounts): delivery preference (weekly / bi-weekly / monthly), auto-approve limit, contacts and private notes.`, how: "search or filter by frequency, click Open account, then use the Preferences sub-tab to set delivery day and auto-approve." },
       activity: { what: "a running log of every approval, shipment, receipt, payment and note." },
       integrations: { what: "how each screen maps to Dutchie, LeafLink, Metrc and QuickBooks, with a log of mock API calls." },
     };
-    const rLabels: Record<RTab, string> = { overview: "Overview", inventory: "Inventory", approvals: "Approvals", receiving: "Receiving", belowpar: "Below par", orders: "Order history", invoices: "Invoices", finance: "Finance", vendors: "Vendors", activity: "Activity", integrations: "Integrations" };
+    const rLabels: Record<RNav, string> = {
+      overview: "Overview", "inventory:all": "Inventory → All inventory", "inventory:belowpar": "Inventory → Below par", "inventory:performance": "Inventory → Performance",
+      "orders:approvals": "Orders → Approvals", "orders:receiving": "Orders → Receiving", "orders:history": "Orders → Order history", "orders:invoices": "Orders → Invoice",
+      finance: "Finance", vendors: "Vendors", activity: "Activity", integrations: "Integrations",
+    };
+    const belowRows = LOCS.filter((l) => rloc === "all" || l.id === rloc).reduce((s, l) => s + PRODUCTS.filter((p) => inv[`${l.id}|${p.sku}`].qoh < parOf(l.id, p.sku).min).length, 0);
+    const openInv = invoices.filter((i) => inLoc(i) && balOf(i) > 0).length;
+    const pathCur: RNav | "inventory" = rtab === "inventory" ? "inventory" : cur;
     body = (
       <>
-        <RoleBanner<RTab> role="retailer" title={`Retailer console · ${RETAILER}`} current={rtab} go={setRtab}
+        <RoleBanner<RNav | "inventory"> role="retailer" title={`Retailer console · ${RETAILER}`} current={pathCur} go={(n) => rnav(n === "inventory" ? "inventory:all" : n)}
           intro={<>You're the store manager for {LOCS.map((l) => l.name).join(", ")}. Vendors propose restock orders; you approve them and check them in. <strong>Suggested path:</strong></>}
           path={[
-            { tab: "inventory", label: "1. See inventory", hint: "stock vs par per store" },
-            { tab: "approvals", label: "2. Approve orders", hint: `approve, counter or reject${pending.length ? ` · ${pending.length} waiting` : ""}` },
-            { tab: "receiving", label: "3. Receive", hint: "after the vendor ships" },
+            { tab: "inventory", label: "1. See inventory", hint: "stock vs par, below par, performance" },
+            { tab: "orders:approvals", label: "2. Approve orders", hint: `Orders → Approvals${pending.length ? ` · ${pending.length} waiting` : ""}` },
+            { tab: "orders:receiving", label: "3. Receive", hint: "Orders → Receiving, after the vendor ships" },
             { tab: "finance", label: "4. Finance", hint: "payables, sales, margin" },
             { tab: "vendors", label: "5. Vendors", hint: "preferences & auto-approve" },
           ]}
-          tip={<>Shipping happens on the vendor side: after you approve an Ironic order, use Switch account → Vendor log in → Orders to ship it, then come back to Receiving.</>} />
+          tip={<>Shipping happens on the vendor side: after you approve an Ironic order, use Switch account → Vendor log in → Orders to ship it, then come back to Orders → Receiving.</>} />
         <div style={{ ...row, justifyContent: "space-between" }}>
           <Segmented<RTab> value={rtab} onChange={setRtab} options={[
-            { value: "overview", label: "Overview" }, { value: "inventory", label: "Inventory" }, { value: "approvals", label: "Approvals", count: pending.length || undefined },
-            { value: "receiving", label: "Receiving", count: shipped.length || undefined }, { value: "belowpar", label: "Below par" },
-            { value: "orders", label: "Order history" }, { value: "invoices", label: "Invoices" }, { value: "finance", label: "Finance" }, { value: "vendors", label: "Vendors" },
+            { value: "overview", label: "Overview" }, { value: "inventory", label: "Inventory" },
+            { value: "orders", label: "Orders", count: pending.length + shipped.length || undefined }, { value: "finance", label: "Finance" }, { value: "vendors", label: "Vendors" },
             { value: "activity", label: "Activity" }, { value: "integrations", label: "Integrations" },
           ]} />
           <Select options={[{ value: "all", label: "All locations" }, ...LOCS.map((l) => ({ value: l.id, label: l.name }))]} value={rloc} onChange={setRloc} />
         </div>
-        <TabHelp role="retailer" tab={rLabels[rtab]} info={rHelp[rtab]} />
+        {rtab === "inventory" ? (
+          <div data-testid="inventory-subnav"><Segmented<InvSub> value={invSub} onChange={setInvSub} options={[
+            { value: "all", label: "All inventory" }, { value: "belowpar", label: "Below par", count: belowRows || undefined }, { value: "performance", label: "Performance" },
+          ]} /></div>
+        ) : null}
+        {rtab === "orders" ? (
+          <div data-testid="orders-subnav"><Segmented<OrdSub> value={ordSub} onChange={setOrdSub} options={[
+            { value: "approvals", label: "Approvals", count: pending.length || undefined }, { value: "receiving", label: "Receiving", count: shipped.length || undefined },
+            { value: "history", label: "Order history" }, { value: "invoices", label: "Invoice", count: openInv || undefined },
+          ]} /></div>
+        ) : null}
+        <TabHelp role="retailer" tab={rLabels[cur]} info={rHelp[cur]} />
         {rtab === "overview" ? (
           <>
             <Metrics metrics={[
@@ -1082,7 +1115,7 @@ export default function ParLevelPortal() {
                     };
                   })} />
                 ) : <Text>Queue is clear.</Text>}
-                <div style={row}><Button variant="primary" label="Open approvals" onClick={() => setRtab("approvals")} /></div>
+                <div style={row}><Button variant="primary" label="Open Orders → Approvals" onClick={() => rnav("orders:approvals")} /></div>
               </Section>
             </Grid>
             <Section heading="Inbound shipments">
@@ -1093,22 +1126,22 @@ export default function ParLevelPortal() {
             </Section>
           </>
         ) : null}
-        {rtab === "approvals" ? (
+        {rtab === "orders" && ordSub === "approvals" ? (
           <Section heading="Approval queue" caption="Oldest first. Lines show Q.O.H. and par at the receiving location.">
             {pending.length ? pending.map((o) => <OrderCard key={`${o.id}-${o.status}`} order={o} role="retailer" now={clock} inv={inv} act={act} />) : <Callout tone="success">No orders are waiting for approval.</Callout>}
           </Section>
         ) : null}
-        {rtab === "receiving" ? (
+        {rtab === "orders" && ordSub === "receiving" ? (
           <Section heading="Receiving" caption="Count each line; enter shorts and damages. Accepted units update Q.O.H. and generate the invoice.">
             {shipped.length ? shipped.map((o) => <OrderCard key={`${o.id}-${o.status}`} order={o} role="retailer" now={clock} inv={inv} act={act} />) : <Text>No shipments in transit. Approve an Ironic order, then Switch account → Vendor log in → Orders to ship it.</Text>}
           </Section>
         ) : null}
-        {rtab === "belowpar" ? (
-          <Section heading="Inventory below Min, all vendors" caption="Gap to Max = Max − Q.O.H. Sample data.">
+        {rtab === "inventory" && invSub === "belowpar" ? (
+          <Section heading="Below par: inventory under Min, all par-tracked vendors" caption="Gap to Max = Max − Q.O.H. Only the par-tracked vendors have par plans; other menu brands show stock status in All inventory. Sample data.">
             <BelowParTable inv={inv} orders={orders} locFilter={rloc} />
           </Section>
         ) : null}
-        {rtab === "orders" ? (
+        {rtab === "orders" && ordSub === "history" ? (
           <>
             <Section heading="Order history">
               <Table columns={["Order", "Vendor", "Location", "Submitted", "Status", "Value", "Invoice", ""]}
@@ -1119,18 +1152,26 @@ export default function ParLevelPortal() {
             {selOrder ? <OrderCard key={`${selOrder.id}-${selOrder.status}`} order={selOrder} role="retailer" now={clock} inv={inv} act={act} /> : null}
           </>
         ) : null}
-        {rtab === "invoices" ? (
-          <Section heading="Vendor invoices" caption="Record payment settles the remaining balance (demo only; no money moves).">
-            <InvoiceTable invoices={invoices.filter(inLoc)} showVendor pay={pay} />
-          </Section>
+        {rtab === "orders" && ordSub === "invoices" ? (
+          <InvoicesView invoices={invoices.filter(inLoc)} orders={orders.filter(inLoc)} now={clock} pay={pay} openOrder={(id) => { setHistSel(id); rnav("orders:history"); }} />
         ) : null}
         {rtab === "activity" ? <Section heading="Activity log"><LogTable log={log} /></Section> : null}
-        {rtab === "inventory" ? <InventoryTab items={menu} lastSync={dutchieAt} syncing={dutchieSyncing} onSync={() => void syncDutchie()} initialLoc={rloc} now={clock} onReceive={() => setRtab("receiving")} onReceiveHistory={() => setRtab("orders")} /> : null}
+        {rtab === "inventory" && invSub === "all" ? <InventoryTab items={menu} lastSync={dutchieAt} syncing={dutchieSyncing} onSync={() => void syncDutchie()} initialLoc={rloc} now={clock} onReceive={() => rnav("orders:receiving")} onReceiveHistory={() => rnav("orders:history")} /> : null}
+        {rtab === "inventory" && invSub === "performance" ? (
+          <>
+            <SyncLine provider="Dutchie POS" at={dutchieAt} syncing={dutchieSyncing} onSync={() => void syncDutchie()} />
+            <PerformanceTab key={`perf-${rloc}`} items={menu} inv={inv} orders={orders} initialLoc={rloc} now={clock} />
+          </>
+        ) : null}
         {rtab === "finance" ? <FinanceTab key={`fin-${rloc}`} invoices={invoices} now={clock} initialLoc={rloc} pay={pay} /> : null}
         {rtab === "vendors" ? (
           <AccountsTab role="retailer" noun="vendor" me="Store manager" now={clock}
-            accounts={VENDORS.map((v) => ({ id: v.id, name: v.name, subtitle: Array.from(new Set(PRODUCTS.filter((p) => p.vendorId === v.id).map((p) => p.category))).join(", "),
-              license: VENDOR_LICENSE[v.id], address: "Oregon (sample address)", terms: v.terms, leadDays: v.leadDays }))}
+            accounts={ALL_VENDORS.map((v) => {
+              const skus = v.catalog ? COMPETITOR_SKUS.filter((r) => r[1] === v.name).length : 0;
+              const cats = v.catalog ? (v.categories ?? []).join(", ") : Array.from(new Set(PRODUCTS.filter((p) => p.vendorId === v.id).map((p) => p.category))).join(", ");
+              return { id: v.id, name: v.name, subtitle: `${cats || "Various"} · ${v.catalog ? (skus ? `${skus} sample SKU${skus === 1 ? "" : "s"} · no par plan` : "sample catalog pending") : "par-tracked vendor"}`,
+                license: VENDOR_LICENSE[v.id], address: "Oregon (sample address)", terms: v.terms, leadDays: v.leadDays };
+            })}
             prefs={rPrefs}
             savePrefs={(id, p) => {
               setRPrefs((m) => ({ ...m, [id]: p }));
@@ -1158,7 +1199,7 @@ export default function ParLevelPortal() {
       {body}
       <Section heading="How the demo works" collapsible defaultOpen={stage === "signin"}>
         <Steps steps={HOW_STEPS} />
-        <div style={{ ...small, color: t.text.tertiary }}>Everything lives in this page's memory and resets on reload. Try: Vendor log in (Ironic), submit the suggested order, Switch account → Retail log in to approve it, switch back to ship, then receive it.</div>
+        <div style={{ ...small, color: t.text.tertiary }}>Everything lives in this page's memory and resets on reload. Try: Vendor log in (Ironic), submit the suggested order, Switch account → Retail log in → Orders → Approvals to approve it, switch back to ship, then receive it in Orders → Receiving. Inventory → Performance has the sales charts.</div>
       </Section>
       <UpdatesSection notes={UPDATES} />
     </Page>

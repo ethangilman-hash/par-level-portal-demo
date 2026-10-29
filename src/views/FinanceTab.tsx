@@ -1,6 +1,6 @@
 // Retailer Finance tab: ledger, payables aging, sales/tax/margin, promotions, loyalty, payment mix, cash/safe log.
 // Sales-side numbers come from the Dutchie adapter; ledger balances and bills from the QuickBooks adapter.
-// Payables are the demo's own invoices, so they always match the Invoices tab.
+// Payables are the demo's own invoices, so they always match Orders → Invoice.
 import { Section, Metrics, Table, Select, Segmented, LineChart, Bars, Grid, Button, Callout, Text, Status, useEffect, useState, useRef } from "../kit";
 import { useStyles, SyncLine } from "../ui";
 import { DAY, ITEMS, LOCS, LOC_NAME, SALES, VENDOR_BY_ID, balOf, fd, money, money0, paidOf, type Invoice } from "../data";

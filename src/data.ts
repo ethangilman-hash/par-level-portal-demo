@@ -6,6 +6,8 @@
 // Catalog: product names, categories, sizes, THC and shelf (out-the-door) prices adapted from a real dispensary menu (2026-10-22);
 // every brand is renamed to a parody name. The Ironic line is invented using real menu sizes and price ranges.
 // Tuple: sku, vendorId, name, brand, category, subcategory, strain, size, shelfPrice, thc
+import { CATALOG_BRANDS } from "./catalog/brands";
+
 export const MENU_SKUS: readonly (readonly [string, string, string, string, string, string, string, string, number, string])[] = [
   ["PGR-101", "poor", "Mid-Town Haze", "PoorGrown", "Flower", "bulk-flower", "Sativa", "1/8oz", 17, "27.78%"],
   ["RBD-101", "rbd", "Azul Bluntz", "Red Beard", "Flower", "", "Indica-Hybrid", "1/8oz", 17, "22.42%"],
@@ -136,11 +138,43 @@ export const COMPETITOR_SKUS: readonly (readonly [string, string, string, string
   ["Wedding Pie Live Resin Tincture - 1oz", "Bobslid Extracts", "Tincture", "30g", 36],
   ["Headband Live Resin Tincture - 1oz", "Bobslid Extracts", "Tincture", "30g", 36],
   ["Durban Poison Live Resin Tincture - 1oz", "Bobslid Extracts", "Tincture", "30g", 36],
+  // Major menu brands without par tracking (a few sample SKUs each; parody names, see docs/PARODY_MAP.md).
+  ["Hawaiian Fizz Live Resin Budder - 1g", "Willamostly Valley Alchemy", "Concentrate", "1g", 27],
+  ["Green Crackle LR Disposable Pod - 1g", "Willamostly Valley Alchemy", "Vaporizers", "1g", 39],
+  ["Lemon Lime 1:1:1 THC:CBD:CBG Gummy 10pk", "Willamostly Valley Alchemy", "Edible", "35g", 12],
+  ["Royal Grape Infused + Flavored Pre-Roll - 1g", "Notional Cannabis Co.", "Pre-Rolls", "1g", 7],
+  ["Orange Cream Infused + Flavored Pre-Roll - 1g", "Notional Cannabis Co.", "Pre-Rolls", "1g", 7],
+  ["Creamy Mojito Cured Resin Cart - 1g", "Endurage Cannabis", "Vaporizers", "1g", 36],
+  ["Maui Wowie Cured Resin Infused Pre-Roll - 1.5g", "Endurage Cannabis", "Pre-Rolls", "1.5g", 19],
+  ["Pro 3D XL Chamber", "Huffco", "Accessories", "each", 100],
+  ["Pinnacle 3D Chamber Onyx", "Huffco", "Accessories", "each", 60],
+  ["Big Perm", "Loftless", "Flower", "1/8oz", 42],
+  ["Crusher Claw", "Loftless", "Flower", "1/8oz", 42],
+  ["Super Punch 250mg Nano Syrup - 2oz", "Cannabluff", "Edible", "57g", 24],
+  ["Dirty Soda", "PDQ Organics", "Flower", "1/8oz", 35],
+  ["Rainbow Meltz Cured Resin Cart - 1g", "PDQ Organics", "Vaporizers", "1g", 29],
+  ["Black Sesame Pre-Roll Pack - 2.8g", "Deep Shriek Gardens", "Pre-Rolls", "2.8g", 30],
+  ["Watermelon Nano Gummy 100mg", "Vertigo Leaf", "Edible", "26g", 7],
+  ["Grape Nano Gummy 100mg", "Vertigo Leaf", "Edible", "26g", 7],
+  ["Peachy Kicker Sativa Gummy 100mg", "Mulled Extracts", "Edible", "12g", 6],
+  ["Strawberry Melt Cured Resin Disposable Pod - 1g", "Concessions", "Vaporizers", "1g", 24],
+  ["Amaretto Sour Badder - 1g", "Beehave Extracts", "Concentrate", "1g", 15],
+  ["Black Widow", "Trichrome Farms", "Flower", "1/8oz", 28],
+  ["Mint Dark Chocolate Truffle 5pk", "Crop Squiggle Chocolates", "Edible", "56g", 26],
+  ["Yogurt Dip", "Eugreed Farms", "Flower", "1/8oz", 35],
+  ["Sour D BHO Shatter - 1g", "NW Kinda", "Concentrate", "1g", 13],
+  ["Blue Razz 100mg Soda - 12oz", "Keef Sofa", "Edible", "339g", 12],
+  ["Fruit Punch 100mg Soda - 8oz", "Tragic Number", "Edible", "224g", 15],
+  ["Logo Skate Deck", "Shelf Life House Label", "Accessories", "each", 50],
 ];
 
 export type StatusToneT = "success" | "warning" | "danger" | "accent" | "neutral";
 
-export interface Vendor { id: string; name: string; leadDays: number; minOrder: number; terms: string; emails: string[] }
+export interface Vendor {
+  id: string; name: string; leadDays: number; minOrder: number; terms: string; emails: string[];
+  /** Menu vendors without vendor-managed pars (the full menu brand list). */
+  catalog?: boolean; categories?: readonly string[]; menuCount?: number;
+}
 export const VENDORS: Vendor[] = [
   { id: "hmz", name: "Hellamidz", leadDays: 3, minOrder: 250, terms: "Net 14", emails: ["orders@hellamidz.example", "ar@hellamidz.example"] },
   { id: "myld", name: "Myld", leadDays: 5, minOrder: 350, terms: "Net 14", emails: ["wholesale@myld.example"] },
@@ -148,7 +182,15 @@ export const VENDORS: Vendor[] = [
   { id: "rbd", name: "Red Beard", leadDays: 3, minOrder: 200, terms: "Net 14", emails: ["crew@redbeard.example"] },
   { id: "iron", name: "Ironic", leadDays: 4, minOrder: 300, terms: "Net 14", emails: ["orders@ironic.example", "reports@ironic.example"] },
 ];
-export const VENDOR_BY_ID: Record<string, Vendor> = Object.fromEntries(VENDORS.map((v) => [v.id, v]));
+/** Every brand on the menu as a vendor account (par-tracked five first, then the catalog brands). */
+export const CATALOG_VENDORS: Vendor[] = CATALOG_BRANDS.map(([id, name, categories, menuCount], i) => ({
+  id, name, categories, menuCount, catalog: true,
+  leadDays: 2 + Math.floor(h(id + "lead") * 5), minOrder: [150, 200, 250, 300, 400, 500][Math.floor(h(id + "min") * 6)],
+  terms: ["Net 7", "Net 14", "Net 14", "Net 30", "Net 21"][i % 5], emails: [`orders@${id.slice(2).replace(/-/g, "")}.example`],
+}));
+export const ALL_VENDORS: Vendor[] = [...VENDORS, ...CATALOG_VENDORS];
+export const VENDOR_BY_ID: Record<string, Vendor> = Object.fromEntries(ALL_VENDORS.map((v) => [v.id, v]));
+export const VENDOR_BY_NAME: Record<string, Vendor> = Object.fromEntries(ALL_VENDORS.map((v) => [v.name, v]));
 export const RETAILER = "Demo Dispensary Co.";
 export interface Loc { id: string; name: string }
 export const LOCS: Loc[] = [

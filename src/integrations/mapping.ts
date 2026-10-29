@@ -9,7 +9,7 @@ export const USED_BY: Record<ProviderId, { fn: string; adapter: string }[]> = {
   dutchie: [
     { fn: "Retailer Inventory tab (menu, quantities, prices, THC)", adapter: "dutchie.getInventory" },
     { fn: "Vendor Q.O.H., Par Levels, Suggested Order, Below par, Alerts", adapter: "dutchie.getInventory" },
-    { fn: "Receiving: increase store inventory", adapter: "dutchie.receiveInventory" },
+    { fn: "Orders → Receiving: increase store inventory", adapter: "dutchie.receiveInventory" },
     { fn: "Finance: sales, tax, COGS, payment mix", adapter: "dutchie.getSales" },
     { fn: "Finance: discounts & promotions", adapter: "dutchie.getDiscounts" },
     { fn: "Finance: loyalty", adapter: "dutchie.getLoyaltySummary" },
@@ -35,7 +35,7 @@ export const USED_BY: Record<ProviderId, { fn: string; adapter: string }[]> = {
   quickbooks: [
     { fn: "Receiving: auto-invoice in the vendor's company", adapter: "quickbooks.createInvoice" },
     { fn: "Receiving: bill in the retailer's company", adapter: "quickbooks.createBill" },
-    { fn: "Invoices / Finance payables: record payment", adapter: "quickbooks.recordPayment" },
+    { fn: "Orders → Invoice / Finance payables: record payment", adapter: "quickbooks.recordPayment" },
     { fn: "Finance: ledger balances (bank, A/P)", adapter: "quickbooks.getAccounts" },
   ],
 };
