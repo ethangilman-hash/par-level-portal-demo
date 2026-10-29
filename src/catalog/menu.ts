@@ -1,6 +1,6 @@
 // Dutchie-style retail menu built from the demo's sample catalog (vendor SKUs + competitor parody brands).
 // Category order, strain types and weight options follow how a typical Dutchie dispensary menu is organized.
-import { ITEMS, PRODUCT, LOCS, SALES, last4, parOf, h, type InvMap, type ParLevel } from "../data";
+import { ITEMS, PRODUCT, LOCS, SALES, last4, parOf, h, sh, type InvMap, type ParLevel } from "../data";
 
 export const MENU_CATEGORIES = ["Flower", "Pre-Rolls", "Vaporizers", "Concentrates", "Edibles", "Tinctures", "Topicals", "Accessories"] as const;
 export type MenuCategory = (typeof MENU_CATEGORIES)[number];
@@ -124,8 +124,8 @@ export const weeklyUnits = (key: string, loc: string): number => last4(SALES[key
 
 /** Last sale of a menu option at a store: roughly one sales interval back (7 / weekly units), never after `now`. Null = never sold. */
 export function lastSoldAt(optionId: string, loc: string, velocity: number, now: number): number | null {
-  const gapDays = velocity > 0 ? Math.min(21, (7 / velocity) * (0.2 + 1.6 * h(optionId + loc + "ls"))) : 30 + 30 * h(optionId + "old");
-  return velocity <= 0.05 && h(optionId + loc + "never") < 0.3 ? null : now - gapDays * 86400000 - h(optionId + loc + "hr") * 6 * 3600000;
+  const gapDays = velocity > 0 ? Math.min(21, (7 / velocity) * (0.2 + 1.6 * sh(optionId + loc + "ls"))) : 30 + 30 * sh(optionId + "old");
+  return velocity <= 0.05 && sh(optionId + loc + "never") < 0.3 ? null : now - gapDays * 86400000 - sh(optionId + loc + "hr") * 6 * 3600000;
 }
 
 /** Par for a menu option: vendor SKUs use the vendor par plan; other options get a sample par from velocity. */
@@ -152,14 +152,14 @@ export function seedMenuStock(inv: InvMap): { units: Record<string, Record<strin
     for (const p of MENU) {
       if (p.bulk) {
         const par = bulkPar(l.id, p.key);
-        const f = h(p.key + l.id + "g");
+        const f = sh(p.key + l.id + "g");
         grams[l.id][p.key] = f < 0.06 ? 0 : Math.round(par.max * (0.2 + f * 1.1) * 2) / 2;
         continue;
       }
       for (const o of p.options) {
         if (p.vendorId && PRODUCT[o.id]) { units[l.id][o.id] = inv[`${l.id}|${o.id}`].qoh; continue; }
         const par = optionPar(l.id, o.id);
-        const f = h(o.id + l.id + "q");
+        const f = sh(o.id + l.id + "q");
         units[l.id][o.id] = f < 0.05 ? 0 : Math.round(par.max * (0.2 + f * 1.0));
       }
     }

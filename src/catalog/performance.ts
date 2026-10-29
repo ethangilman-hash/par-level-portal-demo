@@ -2,7 +2,7 @@
 // The last 8 weeks come straight from the weekly SALES table (the same numbers behind sales velocity);
 // earlier weeks extrapolate each item's early-September rate with a gentle growth curve and a 4/20 spike.
 // Days are split by weekday shape and a per-store daily wobble. All sample data.
-import { ITEMS, LOCS, SALES, h, type Item } from "../data";
+import { ITEMS, LOCS, SALES, sh, type Item } from "../data";
 import { MENU_BY_KEY } from "./menu";
 
 const D0 = Date.UTC(2026, 0, 1, 19); // Jan 1, 2026, noon PT
@@ -17,7 +17,7 @@ const APR20 = idx(2026, 3, 20);
 const DOW = [0.92, 0.8, 0.84, 0.93, 1.04, 1.32, 1.25]; // Sun … Sat
 const DOW_SUM = DOW.reduce((a, b) => a + b, 0);
 
-export const discRate = (key: string) => 0.04 + 0.11 * h(key + "disc");
+export const discRate = (key: string) => 0.04 + 0.11 * sh(key + "disc");
 export const unitCostOf = (it: Item) => MENU_BY_KEY[it.key]?.unitCost ?? it.price * 0.5;
 
 function growth(d: number): number {
@@ -30,13 +30,15 @@ function growth(d: number): number {
 const N = LAST + 1;
 /** Per-store daily multiplier (weekday shape × wobble × growth), shared across items so totals stay coherent. */
 const DAY_F: Record<string, Float64Array> = {};
+function buildDayFactors(): void {
 for (const l of LOCS) {
   const a = new Float64Array(N);
   for (let d = 0; d < N; d++) {
     const dow = new Date(dayMs(d) - 7 * 3600000).getUTCDay();
-    a[d] = (DOW[dow] / DOW_SUM) * (0.86 + 0.28 * h(`day${l.id}${d}`)) * growth(d);
+    a[d] = (DOW[dow] / DOW_SUM) * (0.86 + 0.28 * sh(`day${l.id}${d}`)) * growth(d);
   }
   DAY_F[l.id] = a;
+}
 }
 const weeklyAt = (key: string, loc: string, d: number) => {
   const s = SALES[key][loc];
@@ -46,6 +48,7 @@ const weeklyAt = (key: string, loc: string, d: number) => {
 
 /** Prefix sums of units per item per store: PREFIX[key][loc][d] = units sold on days < d. */
 const PREFIX: Record<string, Record<string, Float64Array>> = {};
+function buildPrefix(): void {
 for (const it of ITEMS) {
   PREFIX[it.key] = {};
   for (const l of LOCS) {
@@ -55,6 +58,7 @@ for (const it of ITEMS) {
     PREFIX[it.key][l.id] = p;
   }
 }
+}
 export const unitsIn = (key: string, loc: string, from: number, to: number) => {
   const p = PREFIX[key][loc];
   return p[Math.min(N, to + 1)] - p[Math.max(0, from)];
@@ -63,6 +67,7 @@ export const unitsIn = (key: string, loc: string, from: number, to: number) => {
 export interface DayTotals { gross: number; disc: number; cost: number; units: number }
 /** Store totals per day (all items). */
 const DAILY: Record<string, DayTotals[]> = {};
+function buildDaily(): void {
 for (const l of LOCS) {
   DAILY[l.id] = Array.from({ length: N }, () => ({ gross: 0, disc: 0, cost: 0, units: 0 }));
   for (const it of ITEMS) {
@@ -74,6 +79,14 @@ for (const l of LOCS) {
     }
   }
 }
+}
+/** Rebuild the daily history from the current SALES table and session salt (called on every sign-in). */
+export function rebuildPerformance(): void {
+  buildDayFactors();
+  buildPrefix();
+  buildDaily();
+}
+rebuildPerformance();
 export function dayTotals(locs: string[], d: number): DayTotals {
   const o = { gross: 0, disc: 0, cost: 0, units: 0 };
   for (const l of locs) { const x = DAILY[l][d]; o.gross += x.gross; o.disc += x.disc; o.cost += x.cost; o.units += x.units; }
@@ -107,11 +120,11 @@ export const monthRange = (m: number) => ({ from: idx(2026, m, 1), to: Math.min(
 
 // ── receipts: sample restock cadence per item and store (vendor SKUs also count real receipts from orders)
 export function receipts(key: string, loc: string): { d: number; qty: number }[] {
-  const every = 7 + Math.floor(h(key + loc + "cad") * 3) * 7; // weekly, bi-weekly or every 3 weeks
-  const off = Math.floor(h(key + loc + "off") * every);
+  const every = 7 + Math.floor(sh(key + loc + "cad") * 3) * 7; // weekly, bi-weekly or every 3 weeks
+  const off = Math.floor(sh(key + loc + "off") * every);
   const out: { d: number; qty: number }[] = [];
   for (let d = LAST - off; d >= 0; d -= every) {
-    const qty = Math.max(1, Math.round(unitsIn(key, loc, d - every + 1, d) * (0.9 + 0.35 * h(key + loc + d))));
+    const qty = Math.max(1, Math.round(unitsIn(key, loc, d - every + 1, d) * (0.9 + 0.35 * sh(key + loc + d))));
     out.push({ d, qty });
   }
   return out;

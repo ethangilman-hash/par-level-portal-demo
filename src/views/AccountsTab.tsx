@@ -90,6 +90,8 @@ export function AccountsTab(props: {
   const bal = invs.reduce((s, i) => s + balOf(i), 0);
   const notes = (props.notes[a.id] ?? []).slice().sort((x, y) => y.at - x.at);
   const contacts = props.contacts[a.id] ?? [];
+  const paused = p.status === "Paused";
+  const toggleStatus = () => props.savePrefs(a.id, { ...p, status: paused ? "Active" : "Paused" });
   const top = new Map<string, number>();
   for (const o of os90) for (const l of o.lines) top.set(l.sku, (top.get(l.sku) ?? 0) + (l.received || l.approved));
 
@@ -105,8 +107,25 @@ export function AccountsTab(props: {
             <span style={{ ...t.font.heading2, fontWeight: t.weight.semibold, color: t.text.primary }}>{a.name}</span>
             <span style={small}>{a.subtitle} · License {a.license} · {a.address}</span>
           </div>
-          <div style={row}><Status tone={p.status === "Active" ? "success" : "neutral"}>{p.status}</Status><Status tone="accent">{p.frequency} · {p.deliveryDay} {p.window}</Status></div>
+          <div style={row}>
+            <button type="button" data-testid="account-status-toggle" onClick={toggleStatus}
+              title={paused ? "Paused: click to set Active" : "Active: click to pause"} aria-pressed={paused}
+              style={{ all: "unset", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: t.radius.full,
+                fontSize: t.font.label.fontSize, lineHeight: t.font.label.lineHeight, fontWeight: t.weight.semibold,
+                background: paused ? t.fill.secondary : t.fill.successSubtle, color: paused ? t.text.secondary : t.text.success,
+                border: `1px solid ${paused ? t.border.default : t.text.success}` }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, background: paused ? t.text.tertiary : t.text.success }} />
+              {p.status} <span style={{ fontWeight: t.weight.regular, opacity: 0.8 }}>⇄ {paused ? "Set Active" : "Pause"}</span>
+            </button>
+            <Status tone="accent">{p.frequency} · {p.deliveryDay} {p.window}</Status>
+            <Button variant={paused ? "primary" : undefined} label={paused ? "Resume account" : "Pause account"} onClick={toggleStatus} />
+          </div>
         </div>
+        {paused ? (
+          <Callout tone="warning" lead="Paused.">
+            {props.role === "retailer" ? `Orders from ${a.name} are not auto-approved and the account shows as Paused in your vendor list until you set it back to Active.` : `No new orders go to ${a.name} until you set the account back to Active.`}
+          </Callout>
+        ) : null}
       </div>
       <Metrics metrics={[
         { value: fdw(next.s.nextDelivery), label: "Next delivery", detail: `${next.label ? next.label + " · " : ""}${next.s.basis}` },
@@ -135,6 +154,12 @@ export function AccountsTab(props: {
             {top.size ? <Bars bars={Array.from(top.entries()).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([sku, u]) => ({ label: PRODUCT[sku].name, value: u, display: `${u} units` }))} /> : <span style={small}>No orders in the last 90 days.</span>}
           </Section>
         </Grid>
+      ) : null}
+      {sub === "overview" ? (
+        <>
+          <span data-testid="overview-preferences" style={{ ...strong, marginTop: 4 }}>Preferences · delivery frequency, day, window, status and approvals</span>
+          <PrefsPanel key={`${a.id}|${JSON.stringify(p)}`} role={props.role} prefs={p} preview={(d) => nextOf(a, d)} save={(d) => props.savePrefs(a.id, d)} />
+        </>
       ) : null}
       {sub === "orders" ? (
         <Section heading="Orders">

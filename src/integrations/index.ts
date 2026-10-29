@@ -6,7 +6,7 @@ import { createMockLeafLink, leaflinkNumberFor, leaflinkShortId } from "./mock/l
 import { createMockMetrc, packageTagFor } from "./mock/metrc";
 import { createMockQuickBooks } from "./mock/quickbooks";
 import type { DutchieAdapter, Integrations, LeafLinkAdapter, LeafLinkOrderStatus, MetrcAdapter, QuickBooksAdapter } from "./types";
-import { PRODUCT, RETAILER, VENDOR_BY_ID, seedInventory, seedInvoices, seedOrders, lineSum, type Invoice, type Order, type OrderStatus } from "../data";
+import { PRODUCT, RETAILER, VENDOR_BY_ID, seedInventory, seedInvoices, seedOrders, lineSum, type InvMap, type Invoice, type Order, type OrderStatus } from "../data";
 
 export * from "./types";
 export { PROVIDERS, PROVIDER_ORDER, PROXY_URL_ENV } from "./config";
@@ -40,10 +40,8 @@ export function withExternalIds(orders: Order[], invoices: Invoice[]): { orders:
   };
 }
 
-function build(): Integrations {
-  const orders = seedOrders();
-  const seeded = withExternalIds(orders, seedInvoices(orders));
-  const dutchie: DutchieAdapter = isMock("dutchie") ? createMockDutchie(seedInventory()) : liveStub<DutchieAdapter>("dutchie");
+function build(seeded: { orders: Order[]; invoices: Invoice[] }, inv: InvMap): Integrations {
+  const dutchie: DutchieAdapter = isMock("dutchie") ? createMockDutchie(inv) : liveStub<DutchieAdapter>("dutchie");
   const leaflink: LeafLinkAdapter = isMock("leaflink")
     ? createMockLeafLink(seeded.orders.map((o) => ({
       number: leaflinkNumberFor(o.id), short_id: leaflinkShortId(o.id), status: LL_STATUS[o.status], external_id_buyer: o.id, seller: VENDOR_BY_ID[o.vendorId].name,
@@ -72,8 +70,13 @@ function build(): Integrations {
   };
 }
 
-/** The app-wide adapter set. */
-export const integrations: Integrations = build();
+const initialOrders = seedOrders();
+/** The app-wide adapter set. Rebuilt on every sign-in so the mock stores match that session's sample data. */
+export let integrations: Integrations = build(withExternalIds(initialOrders, seedInvoices(initialOrders)), seedInventory());
+/** Re-seed every mock store (Dutchie stock, LeafLink orders, Metrc transfers, QuickBooks docs) for a new session. */
+export function reseedIntegrations(orders: Order[], invoices: Invoice[], inv: InvMap): void {
+  integrations = build({ orders, invoices }, inv);
+}
 export const RETAILER_NAME = RETAILER;
 
 export { leaflinkNumberFor };

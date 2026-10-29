@@ -219,6 +219,27 @@ export function h(s: string): number {
   }
   return ((x >>> 0) % 10000) / 10000;
 }
+
+// ── per-sign-in session seed ─────────────────────────────────────────────────
+// Static facts (catalog, costs, vendor accounts) use h(). Everything that should feel "newly rolled" on each
+// Retail / Vendor log in (sales history, stock snapshot, last sold, receipts, discounts) uses sh(), which mixes
+// in the session salt. Empty salt = the original fixed sample data.
+let SESSION_SALT = "";
+export const sessionSalt = (): string => SESSION_SALT;
+export const setSessionSalt = (salt: string): void => { SESSION_SALT = salt; };
+/** Session-salted hash in [0, 1): stable for one sign-in, different on the next. */
+export const sh = (s: string): number => h(SESSION_SALT ? SESSION_SALT + "|" + s : s);
+/** Small seeded PRNG (mulberry32) for one-off session draws. */
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 export const money = (n: number): string => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 export const money0 = (n: number): string => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 export const dFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
@@ -263,14 +284,19 @@ export const ITEM: Record<string, Item> = Object.fromEntries(ITEMS.map((i) => [i
 // location and week — by units and by revenue — at ordinary shelf prices.
 export function buildSales(): Record<string, Record<string, number[]>> {
   const out: Record<string, Record<string, number[]>> = {};
+  // Session-level demand mood: per-store traffic and per-category appetite (1 when the salt is empty).
+  const salted = sessionSalt() !== "";
+  const locMood = (l: string) => (salted ? 0.78 + 0.44 * sh("mood" + l) : 1);
+  const catMood = (c: string) => (salted ? 0.7 + 0.6 * sh("cat" + c) : 1);
   for (const it of ITEMS) {
     if (it.vendorId === "iron") continue;
-    const base = (CAT_BASE[it.category] ?? 3) * (0.5 + 1.1 * h(it.key + "b"));
-    const trend = (h(it.key + "t") - 0.5) * 0.9;
+    const base = (CAT_BASE[it.category] ?? 3) * (0.5 + 1.1 * sh(it.key + "b")) * catMood(it.category);
+    const trend = (sh(it.key + "t") - 0.5) * 0.9;
     const row: Record<string, number[]> = {};
     for (const l of LOCS) {
+      const lm = locMood(l.id);
       row[l.id] = WEEKS.map((_, w) =>
-        Math.max(0, Math.round(base * LOC_FACTOR[l.id] * (0.75 + 0.5 * h(it.key + l.id + w)) * (1 + (trend * (w - 3.5)) / 7))),
+        Math.max(0, Math.round(base * LOC_FACTOR[l.id] * lm * (0.75 + 0.5 * sh(it.key + l.id + w)) * (1 + (trend * (w - 3.5)) / 7))),
       );
     }
     out[it.key] = row;
@@ -293,14 +319,14 @@ export function buildSales(): Record<string, Record<string, number[]>> {
         }
         mine.forEach((it, i) => {
           const floor = Math.max(mu, mr / it.price);
-          out[it.key][l.id].push(Math.ceil(floor * 1.12) + (mine.length - i) * 2 + Math.round(h(it.key + l.id + w)));
+          out[it.key][l.id].push(Math.ceil(floor * (1.08 + 0.1 * sh(it.key + l.id + "lead"))) + (mine.length - i) * 2 + Math.round(sh(it.key + l.id + w)));
         });
       }
     }
   }
   return out;
 }
-export const SALES = buildSales();
+export let SALES = buildSales();
 export const salesAt = (key: string, loc: string): number[] =>
   loc === "all" ? WEEKS.map((_, w) => LOCS.reduce((s, l) => s + SALES[key][l.id][w], 0)) : SALES[key][loc];
 export const last4 = (arr: number[]): number => (arr[4] + arr[5] + arr[6] + arr[7]) / 4;
@@ -308,6 +334,8 @@ export const perDay = (sku: string, loc: string): number => last4(SALES[sku][loc
 
 export interface ParLevel { min: number; max: number; maxStrains: number }
 export const PARS: Record<string, ParLevel> = {};
+function buildPars(): void {
+for (const k of Object.keys(PARS)) delete PARS[k];
 for (const l of LOCS) {
   for (const v of VENDORS) {
     const groups = Array.from(new Set(PRODUCTS.filter((p) => p.vendorId === v.id).map((p) => p.group)));
@@ -318,6 +346,13 @@ for (const l of LOCS) {
       PARS[`${l.id}|${v.id}|${g}`] = { min: Math.max(2, Math.round(max * 0.4)), max, maxStrains: ps.length + (h(g + l.id) > 0.6 ? 1 : 0) };
     }
   }
+}
+}
+buildPars();
+/** Re-roll the weekly sales table (and the pars derived from it) for the current session salt. */
+export function rebuildSales(): void {
+  SALES = buildSales();
+  buildPars();
 }
 export const parOf = (loc: string, sku: string): ParLevel => {
   const p = PRODUCT[sku];
@@ -331,9 +366,9 @@ export function seedInventory(): InvMap {
   for (const l of LOCS) {
     for (const p of PRODUCTS) {
       const par = parOf(l.id, p.sku);
-      const f = h(p.sku + l.id + "q");
+      const f = sh(p.sku + l.id + "q");
       const qoh = Math.round(par.max * (f < 0.42 ? f * 0.9 : 0.4 + f * 0.75));
-      m[`${l.id}|${p.sku}`] = { qoh, received: BASE - Math.round((3 + h(p.sku + l.id + "r") * 20) * DAY) };
+      m[`${l.id}|${p.sku}`] = { qoh, received: BASE - Math.round((3 + sh(p.sku + l.id + "r") * 20) * DAY) };
     }
   }
   return m;

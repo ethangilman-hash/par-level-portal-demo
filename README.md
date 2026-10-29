@@ -61,7 +61,7 @@ Every action runs through a typed adapter layer (`src/integrations/`) for **Dutc
 
 "How the demo works" and a separate **Updates** dropdown sit at the bottom of every screen. Notes come from `src/updates.ts`.
 
-The demo starts with seeded orders in every state (pending, past-SLA, countered, approved, shipped, received with a discrepancy, rejected) so each screen has something to show. All state lives in memory and resets on reload.
+Each sign-in starts with a freshly generated order book covering every state (pending, past-SLA, countered, approved, shipped, received with a discrepancy, rejected) so each screen has something to show. All state lives in memory and resets on reload.
 
 **Try this:** Vendor log in (Ironic) → pick a location → Suggested Order → Submit. Then Switch account → Retail log in → Orders → Approvals → Approve. Switch back to Vendor log in → Orders → Ship. Finally, Retail log in → Orders → Receiving → Receive. Watch Q.O.H. and Invoice Logs update.
 
@@ -87,7 +87,7 @@ src/
     charts.tsx     simple SVG/CSS charts: LineChart, Bars, Heatmap, Scatter
 ```
 
-Sample data is generated deterministically from a seeded hash, so every load looks the same.
+Sample data is re-rolled on every sign-in (Retail log in / Vendor log in, including after Switch account): `src/session.ts` picks a fresh 32-bit seed, salts the sample hash (`sh()` in `src/data.ts`) and a mulberry32 PRNG with it, and regenerates the weekly sales table, daily Performance history, stock snapshot, last-sold / receipt cadence, the incoming order book, invoices and activity log, then re-seeds the mock integrations. The seed stays fixed until you switch account, so tab hopping never reshuffles. Orders you created or acted on carry over between sign-ins so the approve → ship → receive loop still works. Catalog, costs, vendor accounts and store licenses stay fixed.
 
 ## License
 

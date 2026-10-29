@@ -1,6 +1,6 @@
 import {
   Page, Section, Text, Callout, Table, Grid, Metrics, Segmented, Select, Button, Input, Toggle, Status, Steps,
-  LineChart, Heatmap, Bars, Scatter, Properties, Rows, useGrokTheme, useState, useEffect, useMemo,
+  LineChart, Heatmap, Bars, Scatter, Properties, Rows, useGrokTheme, useState, useEffect, useMemo, useRef,
 } from "./kit";
 import type { ReactNode, CSSProperties, TableCell } from "./kit";
 
@@ -18,6 +18,7 @@ import { AccountsTab, fdw, type AccountSpec } from "./views/AccountsTab";
 import { UpdatesSection } from "./views/UpdatesSection";
 import { UPDATES } from "./updates";
 import { Landing } from "./views/Landing";
+import { newSeed, startSession } from "./session";
 import { RoleBanner, TabHelp, rolePalette, type TabInfo } from "./views/Guide";
 import {
   FREQ_DAYS, accKey, lastDelivery, openEta, schedule, seedLocationContacts, seedRetailerNotes, seedRetailerPrefs, seedVendorContacts, seedVendorNotes, seedVendorPrefs,
@@ -674,12 +675,32 @@ export default function ParLevelPortal() {
     setClock(n);
     return n;
   };
+  /** Bumped on every sign-in so in-flight syncs from the previous session are ignored. */
+  const sessionGen = useRef(0);
+  /** Orders the user created or acted on; they survive "Switch account" so the approve → ship → receive loop works. */
+  const touched = useRef(new Set<string>());
+  const [sessionSeed, setSessionSeed] = useState<number | null>(null);
+  /** New sign-in: roll a fresh seed and regenerate orders, invoices, stock, sales history and report numbers. */
+  const enterSession = () => {
+    sessionGen.current += 1;
+    const s = startSession(newSeed(), {
+      orders: orders.filter((o) => touched.current.has(o.id)),
+      invoices,
+      log: log.filter((e) => e.at > BASE),
+    });
+    setSessionSeed(s.seed);
+    setOrders(s.orders); setInvoices(s.invoices); setLog(s.log); setInv(s.inv);
+    setMenu({}); setDutchieAt(undefined); setHistSel(""); setOrderFilter("open");
+    void syncDutchie();
+  };
   const addLog = (at: number, actor: string, vendorId: string | null, text: string) => setLog((l) => [{ at, actor, vendorId, text }, ...l]);
   /** Q.O.H. and the retail menu come from Dutchie: pull every location and apply quantities to vendor SKUs. */
   const syncDutchie = async () => {
     setDutchieSyncing(true);
+    const gen = sessionGen.current;
     try {
       const res = await Promise.all(LOCS.map((l) => integrations.dutchie.getInventory(l.id)));
+      if (gen !== sessionGen.current) return; // a newer sign-in re-seeded the store meanwhile
       const byLoc = Object.fromEntries(LOCS.map((l, i) => [l.id, res[i]]));
       setMenu(byLoc);
       setInv((m) => {
@@ -702,7 +723,7 @@ export default function ParLevelPortal() {
   const llSync = (o: Order | undefined, input: Omit<Parameters<typeof integrations.leaflink.syncOrder>[0], "number">) => {
     if (o?.leaflinkNumber) integrations.leaflink.syncOrder({ number: o.leaflinkNumber, ...input }).catch(() => undefined);
   };
-  const upd = (id: string, f: (o: Order) => Order) => setOrders((os) => os.map((o) => (o.id === id ? f(o) : o)));
+  const upd = (id: string, f: (o: Order) => Order) => { touched.current.add(id); setOrders((os) => os.map((o) => (o.id === id ? f(o) : o))); };
   const vname = (id: string) => VENDOR_BY_ID[orders.find((o) => o.id === id)?.vendorId ?? "hmz"].name;
   const vidOf = (id: string) => orders.find((o) => o.id === id)?.vendorId ?? null;
 
@@ -769,7 +790,7 @@ export default function ParLevelPortal() {
       }
       const lines = o.lines.map((l) => ({ ...l, received: rec[l.sku].received, damaged: Math.min(rec[l.sku].damaged, rec[l.sku].received) }));
       const amount = Math.round(lines.reduce((s, l) => s + Math.max(0, l.received - l.damaged) * l.unitCost, 0) * 100) / 100;
-      const invId = `INV-${29300 + invoices.length}`;
+      const invId = `INV-${Math.max(29299, ...invoices.map((i) => Number(i.id.slice(4)) || 0)) + 1}`;
       setInv((m) => {
         const n = { ...m };
         for (const l of lines) {
@@ -818,6 +839,7 @@ export default function ParLevelPortal() {
     const at = tick();
     const num = 1059 + orders.filter((o) => Number(o.id.slice(3)) >= 1059).length;
     const id = `PO-${num}`;
+    touched.current.add(id);
     const value = lineSum(lines, (l) => l.approved);
     const auto = rPrefs[vendor.id].autoApproveUnder > 0 && value < rPrefs[vendor.id].autoApproveUnder && rPrefs[vendor.id].status === "Active";
     setOrders((os) => [{ id, vendorId: vendor.id, locId: loc, status: auto ? "Approved" : "Pending", approvedAt: auto ? at : undefined, lines, mode, submittedAt: at,
@@ -864,7 +886,7 @@ export default function ParLevelPortal() {
         <span style={{ ...strong, color: rc.strong }}>{RETAILER} · {isRetailer ? "Retailer console" : "Vendor Portal"}</span>
         <span style={small}>
           {account ? `Signed in as ${isRetailer ? "Store manager" : vendor?.name ?? ""}` : "Not signed in"}
-          {loc && !isRetailer ? ` · ${LOC_NAME[loc]}` : ""} · Demo clock {fdt(clock)} · Sample data
+          {loc && !isRetailer ? ` · ${LOC_NAME[loc]}` : ""} · Demo clock {fdt(clock)} · Sample data{sessionSeed !== null ? ` (set #${sessionSeed.toString(36).toUpperCase().slice(-5)}, re-rolled each sign-in)` : ""}
         </span>
       </div>
       <div style={row}>
@@ -880,6 +902,7 @@ export default function ParLevelPortal() {
     body = (
       <Landing retailer={RETAILER} vendor={VENDOR_BY_ID[DEMO_VENDOR_ID].name}
         onEnter={(role) => {
+          enterSession();
           if (role === "retailer") { setAccount("retailer"); setProgress(0); setStage("loading"); }
           else { setAccount(DEMO_VENDOR_ID); setPickLoc(DEMO_VENDOR_LOC); setStage("location"); }
         }} />
@@ -1094,6 +1117,19 @@ export default function ParLevelPortal() {
         <TabHelp role="retailer" tab={rLabels[cur]} info={rHelp[cur]} />
         {rtab === "overview" ? (
           <>
+            <div data-testid="store-licenses" style={{ display: "grid", gridTemplateColumns: `repeat(${LOCS.length}, minmax(0, 1fr))`, gap: 12 }}>
+              {LOCS.map((l) => {
+                const below = VENDORS.reduce((s, v) => s + belowCount(v.id, l.id), 0);
+                const waiting = pending.filter((o) => o.locId === l.id).length;
+                return (
+                  <div key={l.id} data-testid={`store-${l.id}`} style={{ ...card, gap: 2, padding: "12px 16px", borderLeft: `4px solid ${rc.solid}` }}>
+                    <span style={{ ...strong, fontSize: t.font.heading3.fontSize }}>{l.name}</span>
+                    <span style={{ ...small, fontFamily: t.font.mono, color: t.text.primary }}>License {LOC_LICENSE[l.id]}</span>
+                    <span style={small}>Adult-use retail · {waiting} awaiting approval · {below} SKUs below Min</span>
+                  </div>
+                );
+              })}
+            </div>
             <Metrics metrics={[
               { value: String(pending.length), label: "Awaiting approval", detail: breached ? `${breached} past ${SLA_HOURS}h SLA` : "all within SLA", tone: breached ? "danger" : "success" },
               { value: `${avgAppr.toFixed(1)}h`, label: "Avg time to approve", detail: `target under ${SLA_HOURS}h` },
@@ -1175,7 +1211,7 @@ export default function ParLevelPortal() {
             prefs={rPrefs}
             savePrefs={(id, p) => {
               setRPrefs((m) => ({ ...m, [id]: p }));
-              addLog(tick(), RETAILER, id, `Vendor preferences updated for ${VENDOR_BY_ID[id].name} (${prefSummary(p)}${p.autoApproveUnder ? `, auto-approve under ${money0(p.autoApproveUnder)}` : ""})`);
+              addLog(tick(), RETAILER, id, `Vendor preferences updated for ${VENDOR_BY_ID[id].name} (${p.status}, ${prefSummary(p)}${p.autoApproveUnder ? `, auto-approve under ${money0(p.autoApproveUnder)}` : ""})`);
               integrations.leaflink.saveBuyerPreferences({ seller: VENDOR_BY_ID[id].name, delivery_preferences: prefSummary(p), auto_approve_under: p.autoApproveUnder }).catch(() => undefined);
             }}
             notes={rNotes}

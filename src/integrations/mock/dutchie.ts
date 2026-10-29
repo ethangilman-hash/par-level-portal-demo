@@ -1,6 +1,6 @@
 import type { DutchieAdapter, DutchieCashSummary, DutchieDiscount, DutchieInventoryItem, DutchieLoyaltySummary, DutchieSalesWeek } from "../types";
 import { MENU, MENU_BY_KEY, seedMenuStock } from "../../catalog/menu";
-import { ITEMS, LOCS, LOC_NAME, SALES, WEEKS, VENDOR_BY_ID, h, type InvMap } from "../../data";
+import { ITEMS, LOCS, LOC_NAME, SALES, WEEKS, VENDOR_BY_ID, h, sh, type InvMap } from "../../data";
 import { mockCall } from "./common";
 
 /** Oregon-style retail cannabis tax: 17% state + up to 3% local (sample local rates). */
@@ -27,18 +27,18 @@ export function createMockDutchie(inv: InvMap): DutchieAdapter {
           g += u * it.price;
           c += u * (m ? m.unitCost : it.price * 0.5);
         }
-        const dRate = 0.085 + 0.03 * h(`disc${l}${w}`);
-        const rRate = 0.003 + 0.004 * h(`ret${l}${w}`);
+        const dRate = 0.085 + 0.03 * sh(`disc${l}${w}`);
+        const rRate = 0.003 + 0.004 * sh(`ret${l}${w}`);
         const d = g * dRate, rt = g * rRate, n = g - d - rt;
         gross += g; disc += d; ret += rt; net += n; cogs += c * (1 - rRate);
         st += n * STATE_TAX; lt += n * LOCAL_TAX[l];
       }
       const total = net + st + lt;
-      const cashShare = 0.58 + 0.06 * h(`cash${loc}${w}`);
+      const cashShare = 0.58 + 0.06 * sh(`cash${loc}${w}`);
       out.push({
         weekStart: WEEKS[w], transactions: Math.round(net / 41.5), grossSales: r2(gross), discounts: r2(disc), returns: r2(ret), netSales: r2(net),
         stateTax: r2(st), localTax: r2(lt), cogs: r2(cogs), cashPaid: r2(total * cashShare), debitPaid: r2(total * (1 - cashShare)), electronicPaid: 0,
-        loyaltyEarned: Math.round(net * 0.56), loyaltySpent: Math.round(net * 0.56 * (0.55 + 0.1 * h(`loy${loc}${w}`))),
+        loyaltyEarned: Math.round(net * 0.56), loyaltySpent: Math.round(net * 0.56 * (0.55 + 0.1 * sh(`loy${loc}${w}`))),
       });
     }
     return out;
@@ -105,7 +105,7 @@ export function createMockDutchie(inv: InvMap): DutchieAdapter {
         ];
         return promos.map(([desc, code, method, member, brand, share], i): DutchieDiscount => {
           const amt = r2(totalDisc * share);
-          const redemptions = Math.round(tx * share * 0.16 * (0.8 + 0.4 * h(desc)));
+          const redemptions = Math.round(tx * share * 0.16 * (0.8 + 0.4 * sh(desc)));
           return { id: 400 + i, discountDescription: desc, discountCode: code, applicationMethod: method, isActive: i !== 5 || h(locationId) > 0.2,
             isLoyaltyMemberOnly: member, brandFunded: brand, redemptions, amountDiscounted: amt, salesWithDiscount: r2(redemptions * 46.5), marginImpactPts: r2((amt / Math.max(1, net)) * 100 * (brand ? 0.4 : 1)) };
         });
@@ -138,9 +138,9 @@ export function createMockDutchie(inv: InvMap): DutchieAdapter {
           for (let d = 6; d >= 0; d--) {
             for (const term of ["Register 1", "Register 2"]) {
               const share = term === "Register 1" ? 0.56 : 0.44;
-              const sales = r2((wk.cashPaid / 7) * share * (0.8 + 0.4 * h(l + d + term)));
+              const sales = r2((wk.cashPaid / 7) * share * (0.8 + 0.4 * sh(l + d + term)));
               const returns = r2(sales * 0.004);
-              const over = r2((h(l + d + term + "os") - 0.5) * 12);
+              const over = r2((sh(l + d + term + "os") - 0.5) * 12);
               const start = 300;
               const deposits = r2(Math.floor((sales - returns) / 100) * 100);
               out.push({ terminalName: `${LOC_NAME[l]} · ${term}`, date: new Date(Date.UTC(2026, 9, 22 - d)).toISOString().slice(0, 10), startingBalance: start, sales, returns,
