@@ -60,7 +60,7 @@ export function AccountsTab(props: {
           <Select label="Delivery frequency" options={[{ value: "all", label: "Any frequency" }, ...FREQUENCIES.map((f) => ({ value: f, label: f }))]} value={freq} onChange={setFreq} />
         </div>
         {list.length ? (
-          <Table columns={["Account", "License", "Status", "Frequency", "Next delivery", "Order by", "Orders (90d)", "Open balance", ""]}
+          <Table id={`accounts-${props.role}`} columns={["Account", "License", "Status", "Frequency", "Next delivery", "Order by", "Orders (90d)", "Open balance", ""]}
             rows={list.map((a) => {
               const p = props.prefs[a.id];
               const n = nextOf(a);

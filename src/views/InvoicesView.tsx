@@ -64,7 +64,7 @@ export function InvoicesView(props: { invoices: Invoice[]; orders: Order[]; now:
           { value: "paid", label: "Paid" }, { value: "proforma", label: "Pro forma (approved / shipped)", count: docs.filter((d) => d.kind === "Pro forma").length || undefined },
         ]} />
         {shown.length ? (
-          <Table columns={["Invoice", "Order", "Vendor", "Location", "Order status", "Invoice date", "Due", "Amount", "Balance", "Status", ""]}
+          <Table id="retail-invoices" columns={["Invoice", "Order", "Vendor", "Location", "Order status", "Invoice date", "Due", "Amount", "Balance", "Status", ""]}
             align={["start", "start", "start", "start", "start", "start", "start", "end", "end", "start", "end"]}
             rows={shown.map((d) => [d.id, d.orderId, VENDOR_BY_ID[d.vendorId].name, LOC_NAME[d.locId],
               d.order ? <Status key="o" tone={STATUS_TONE[d.order.status]}>{d.order.status}</Status> : "Received (archived)",

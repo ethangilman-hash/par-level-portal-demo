@@ -1,6 +1,6 @@
 // Retailer Inventory tab, laid out like Dutchie POS back-office Inventory: title + actions, search, filter dropdowns,
 // dense checkbox table and a pagination footer. Quantities come from the Dutchie adapter; velocity is sample sales data.
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "../kit";
+import { useEffect, useMemo, useRef, useState, useTableControls, type CSSProperties, type ReactNode } from "../kit";
 import { useStyles, SyncLine } from "../ui";
 import { ITEM, LOCS, LOC_NAME, VENDOR_BY_ID, VENDOR_BY_NAME, BASE, h, money } from "../data";
 import { MENU_BY_KEY, MENU_CATEGORIES, OPTION_OWNER, STRAIN_FILTERS, bulkPar, lastSoldAt, optionPar, weeklyUnits, type MenuCategory, type MenuProduct } from "../catalog/menu";
@@ -22,6 +22,10 @@ interface InvRow {
   velocity: number; pop: number; locIdx: number; lastSold: number | null; status: StockStatus; tags: Tag[]; catIdx: number;
 }
 type SortKey = "default" | "sku" | "product" | "brand" | "location" | "available" | "price" | "cost" | "velocity" | "lastSold";
+type ColKey = Exclude<SortKey, "default">;
+/** Default column order; retailers can drag headers to rearrange (kept per browser session). */
+const INV_COLS: readonly ColKey[] = ["sku", "product", "brand", "location", "available", "price", "cost", "velocity", "lastSold"];
+const DESC_FIRST: readonly string[] = ["velocity", "lastSold", "available", "price", "cost"];
 
 /** Dutchie-style 6-character SKU for items without a vendor SKU. */
 const hexSku = (id: string) => Math.floor(h(id + "sku") * 0xffffff).toString(16).toUpperCase().padStart(6, "0");
@@ -157,7 +161,8 @@ export function InventoryTab(props: {
   const [tagF, setTagF] = useState<Tag[]>([]);
   const [strainF, setStrainF] = useState<string[]>([]);
   const [hideZero, setHideZero] = useState(false);
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "default", dir: 1 });
+  const ctl = useTableControls("retail-inventory-all", INV_COLS, { defaultDir: (c) => (DESC_FIRST.includes(c) ? -1 : 1), accent: t.text.accent });
+  const sort: { key: SortKey; dir: 1 | -1 } = ctl.sort && (INV_COLS as readonly string[]).includes(ctl.sort.col) ? { key: ctl.sort.col as ColKey, dir: ctl.sort.dir } : { key: "default", dir: 1 };
   const [perPage, setPerPage] = useState(50);
   const [page, setPage] = useState(0);
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -174,7 +179,9 @@ export function InventoryTab(props: {
 
   const needle = q.trim().toLowerCase();
   const shown = useMemo(() => {
-    const cmp = (a: InvRow, b: InvRow): number => {
+    const dflt = (a: InvRow, b: InvRow) => a.catIdx - b.catIdx || b.pop - a.pop || a.brand.localeCompare(b.brand) || a.p.name.localeCompare(b.p.name) || a.price - b.price || a.locIdx - b.locIdx || a.room.localeCompare(b.room);
+    const cmp = (a: InvRow, b: InvRow): number => key(a, b) || dflt(a, b);
+    const key = (a: InvRow, b: InvRow): number => {
       const d = sort.dir;
       switch (sort.key) {
         case "sku": return d * a.sku.localeCompare(b.sku);
@@ -185,9 +192,9 @@ export function InventoryTab(props: {
         case "price": return d * (a.price - b.price);
         case "cost": return d * (a.cost - b.cost);
         case "velocity": return d * (a.velocity - b.velocity);
-        case "lastSold": return d * ((a.lastSold ?? 0) - (b.lastSold ?? 0));
+        case "lastSold": return a.lastSold === null || b.lastSold === null ? (a.lastSold === b.lastSold ? 0 : a.lastSold === null ? 1 : -1) : d * (a.lastSold - b.lastSold);
         // Dutchie menu order: category, then best-selling products within each category (all sizes and rooms kept together).
-        default: return a.catIdx - b.catIdx || b.pop - a.pop || a.brand.localeCompare(b.brand) || a.p.name.localeCompare(b.p.name) || a.price - b.price || a.locIdx - b.locIdx || a.room.localeCompare(b.room);
+        default: return 0;
       }
     };
     return scoped
@@ -200,9 +207,9 @@ export function InventoryTab(props: {
       .filter((r) => !hideZero || r.available > 0)
       .filter((r) => !needle || `${r.sku} ${r.product} ${r.brand} ${r.vendor} ${r.p.category} ${r.p.sub} ${r.p.strain} ${r.room} ${LOC_NAME[r.loc]}`.toLowerCase().includes(needle))
       .sort(cmp);
-  }, [scoped, statusF, vendorF, roomF, catF, tagF, strainF, hideZero, needle, sort]);
+  }, [scoped, statusF, vendorF, roomF, catF, tagF, strainF, hideZero, needle, sort.key, sort.dir]);
 
-  useEffect(() => { setPage(0); }, [store, q, statusF, vendorF, roomF, catF, tagF, strainF, hideZero, perPage, sort]);
+  useEffect(() => { setPage(0); }, [store, q, statusF, vendorF, roomF, catF, tagF, strainF, hideZero, perPage, sort.key, sort.dir]);
   const pages = Math.max(1, Math.ceil(shown.length / perPage));
   const pg = Math.min(page, pages - 1);
   const slice = shown.slice(pg * perPage, pg * perPage + perPage);
@@ -234,13 +241,45 @@ export function InventoryTab(props: {
     letterSpacing: 0.4, textTransform: "uppercase", color: t.text.secondary, borderBottom: `1px solid ${rowBorder}`, whiteSpace: "nowrap", userSelect: "none" };
   const td: CSSProperties = { padding: "8px 10px", fontSize: 12.5, lineHeight: "18px", color: t.text.primary, borderBottom: `1px solid ${rowBorder}`, verticalAlign: "middle" };
   const num: CSSProperties = { ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
-  const SortTh = (p: { k: SortKey; label: string; right?: boolean; title?: string }) => {
+  const COL: Record<ColKey, { label: string; right?: boolean; title?: string; cell: (r: InvRow) => ReactNode }> = {
+    sku: { label: "SKU", cell: (r) => (
+      <td key="sku" style={{ ...td, whiteSpace: "nowrap" }}>
+        <a href="#" onClick={(e) => { e.preventDefault(); setQ(r.sku); }} title="Show every room for this SKU" style={{ color: link, fontWeight: t.weight.semibold, textDecoration: "none" }}>{r.sku}</a>
+      </td>) },
+    product: { label: "Product", cell: (r) => (
+      <td key="product" style={{ ...td, fontWeight: t.weight.semibold, minWidth: 240 }}>
+        {r.product}
+        <div style={{ fontSize: 11, lineHeight: "15px", color: t.text.secondary, fontWeight: t.weight.regular }}>{r.p.category} · {r.p.sub}{r.p.strain !== "N/A" ? ` · ${r.p.strain}` : ""}</div>
+      </td>) },
+    brand: { label: "Brand / Vendor", cell: (r) => (
+      <td key="brand" style={{ ...td, whiteSpace: "nowrap" }}>
+        <span style={{ fontWeight: t.weight.medium }}>{r.brand}</span>
+        <div style={{ fontSize: 11, lineHeight: "15px", color: r.p.vendorId ? t.text.accent : t.text.secondary }}>{r.p.vendorId ? "Vendor (par-tracked)" : r.vendor === r.brand ? "Vendor account · no par" : r.vendor}</div>
+      </td>) },
+    location: { label: "Location", cell: (r) => (
+      <td key="location" style={{ ...td, whiteSpace: "nowrap" }}>
+        {r.room}
+        {store === "all" ? <div style={{ fontSize: 11, lineHeight: "15px", color: t.text.secondary }}>{LOC_NAME[r.loc]}</div> : null}
+      </td>) },
+    available: { label: "Available", right: true, title: "On hand in this room (units, or grams for bulk flower)", cell: (r) => (
+      <td key="available" style={{ ...num, color: statusColor(r.status), fontWeight: r.status === "In stock" ? t.weight.regular : t.weight.semibold }} title={r.status}>
+        {r.grams ? `${r.available.toLocaleString(undefined, { maximumFractionDigits: 1 })} g` : r.available.toLocaleString()}
+      </td>) },
+    price: { label: "Price", right: true, cell: (r) => <td key="price" style={num}>{money(r.price)}{r.grams ? <span style={{ color: t.text.secondary }}> /g</span> : null}</td> },
+    cost: { label: "Cost", right: true, cell: (r) => <td key="cost" style={num}>{money(r.cost)}{r.grams ? <span style={{ color: t.text.secondary }}> /g</span> : null}</td> },
+    velocity: { label: "Sales velocity (units/wk)", right: true, title: "Average units sold per week over the last 4 weeks at this store (grams/week for bulk flower)",
+      cell: (r) => <td key="velocity" style={num}>{fmtVel(r.velocity)}{r.grams ? <span style={{ color: t.text.secondary }}> g</span> : null}</td> },
+    lastSold: { label: "Last date sold", right: true, cell: (r) => <td key="lastSold" style={{ ...num, color: r.lastSold ? t.text.primary : t.text.tertiary }}>{r.lastSold ? dateFmt.format(r.lastSold) : "Never"}</td> },
+  };
+  // Plain render function (not a component) so header cells keep their identity while a drag is in progress.
+  const sortTh = (p: { k: ColKey }) => {
+    const c = COL[p.k];
     const on = sort.key === p.k;
+    const hp = ctl.headerProps(p.k, { label: c.label });
     return (
-      <th style={{ ...th, textAlign: p.right ? "right" : "left", cursor: "pointer", color: on ? t.text.primary : th.color }} title={p.title ?? `Sort by ${p.label.toLowerCase()}`}
-        aria-sort={on ? (sort.dir === 1 ? "ascending" : "descending") : "none"}
-        onClick={() => setSort(on ? (sort.dir === 1 ? { key: p.k, dir: -1 } : { key: "default", dir: 1 }) : { key: p.k, dir: ["velocity", "lastSold", "available", "price", "cost"].includes(p.k) ? -1 : 1 })}>
-        {p.label}{on ? (sort.dir === 1 ? " ▲" : " ▼") : ""}
+      <th key={p.k} {...hp} style={{ ...th, textAlign: c.right ? "right" : "left", color: on ? t.text.primary : th.color, ...hp.style }}
+        title={`${c.title ? c.title + " · " : ""}${hp.title}`} data-testid={`inv-th-${p.k}`}>
+        {c.label}{ctl.indicator(p.k, t.text.accent)}
       </th>
     );
   };
@@ -310,6 +349,9 @@ export function InventoryTab(props: {
           <span>Status is against par · Sales velocity = last 4-week average · Sample data</span>
           {filtersOn ? <button type="button" onClick={() => { setQ(""); setStatusF([]); setVendorF([]); setRoomF([]); setCatF([]); setTagF([]); setStrainF([]); setHideZero(false); }}
             style={{ all: "unset", cursor: "pointer", color: link, fontWeight: t.weight.semibold }}>Clear filters</button> : null}
+          <span title="Click a column header to sort (click again to flip). Drag a header to rearrange columns.">Click a header to sort · drag to rearrange</span>
+          {sort.key !== "default" ? <button type="button" onClick={() => ctl.clearSort()} style={{ all: "unset", cursor: "pointer", color: link, fontWeight: t.weight.semibold }}>Default order</button> : null}
+          {ctl.customized ? <button type="button" data-testid="inv-reset-cols" onClick={ctl.reset} style={{ all: "unset", cursor: "pointer", color: link, fontWeight: t.weight.semibold }}>Reset columns</button> : null}
           {sel.size ? <span style={{ color: t.text.primary, fontWeight: t.weight.semibold }}>{sel.size} selected</span> : null}
           {notice ? <span style={{ color: t.text.success }}>{notice}</span> : null}
         </div>
@@ -322,15 +364,7 @@ export function InventoryTab(props: {
                   <input type="checkbox" aria-label="Select all on this page" checked={allOnPage} style={{ accentColor: t.fill.accent }}
                     onChange={() => { const n = new Set(sel); slice.forEach((r) => (allOnPage ? n.delete(r.id) : n.add(r.id))); setSel(n); }} />
                 </th>
-                <SortTh k="sku" label="SKU" />
-                <SortTh k="product" label="Product" />
-                <SortTh k="brand" label="Brand / Vendor" />
-                <SortTh k="location" label="Location" />
-                <SortTh k="available" label="Available" right title="On hand in this room (units, or grams for bulk flower)" />
-                <SortTh k="price" label="Price" right />
-                <SortTh k="cost" label="Cost" right />
-                <SortTh k="velocity" label="Sales velocity (units/wk)" right title="Average units sold per week over the last 4 weeks at this store (grams/week for bulk flower)" />
-                <SortTh k="lastSold" label="Last date sold" right />
+                {ctl.order.map((k) => sortTh({ k: k as ColKey }))}
               </tr>
             </thead>
             <tbody>
@@ -345,28 +379,7 @@ export function InventoryTab(props: {
                       <input type="checkbox" aria-label={`Select ${r.sku}`} checked={on} style={{ accentColor: t.fill.accent }}
                         onChange={() => { const n = new Set(sel); if (on) n.delete(r.id); else n.add(r.id); setSel(n); }} />
                     </td>
-                    <td style={{ ...td, whiteSpace: "nowrap" }}>
-                      <a href="#" onClick={(e) => { e.preventDefault(); setQ(r.sku); }} title="Show every room for this SKU" style={{ color: link, fontWeight: t.weight.semibold, textDecoration: "none" }}>{r.sku}</a>
-                    </td>
-                    <td style={{ ...td, fontWeight: t.weight.semibold, minWidth: 240 }}>
-                      {r.product}
-                      <div style={{ fontSize: 11, lineHeight: "15px", color: t.text.secondary, fontWeight: t.weight.regular }}>{r.p.category} · {r.p.sub}{r.p.strain !== "N/A" ? ` · ${r.p.strain}` : ""}</div>
-                    </td>
-                    <td style={{ ...td, whiteSpace: "nowrap" }}>
-                      <span style={{ fontWeight: t.weight.medium }}>{r.brand}</span>
-                      <div style={{ fontSize: 11, lineHeight: "15px", color: r.p.vendorId ? t.text.accent : t.text.secondary }}>{r.p.vendorId ? "Vendor (par-tracked)" : r.vendor === r.brand ? "Vendor account · no par" : r.vendor}</div>
-                    </td>
-                    <td style={{ ...td, whiteSpace: "nowrap" }}>
-                      {r.room}
-                      {store === "all" ? <div style={{ fontSize: 11, lineHeight: "15px", color: t.text.secondary }}>{LOC_NAME[r.loc]}</div> : null}
-                    </td>
-                    <td style={{ ...num, color: statusColor(r.status), fontWeight: r.status === "In stock" ? t.weight.regular : t.weight.semibold }} title={r.status}>
-                      {r.grams ? `${r.available.toLocaleString(undefined, { maximumFractionDigits: 1 })} g` : r.available.toLocaleString()}
-                    </td>
-                    <td style={num}>{money(r.price)}{r.grams ? <span style={{ color: t.text.secondary }}> /g</span> : null}</td>
-                    <td style={num}>{money(r.cost)}{r.grams ? <span style={{ color: t.text.secondary }}> /g</span> : null}</td>
-                    <td style={num}>{fmtVel(r.velocity)}{r.grams ? <span style={{ color: t.text.secondary }}> g</span> : null}</td>
-                    <td style={{ ...num, color: r.lastSold ? t.text.primary : t.text.tertiary }}>{r.lastSold ? dateFmt.format(r.lastSold) : "Never"}</td>
+                    {ctl.order.map((k) => COL[k as ColKey].cell(r))}
                   </tr>
                 );
               })}

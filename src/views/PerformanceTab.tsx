@@ -2,7 +2,7 @@
 // White cards, a KPI strip (Gross Sales highlighted), a teal sales bar chart, a donut breakdown,
 // a ranking table (Master Categories | Categories | Products | Brands | Tags) and monthly / by-location trends.
 // Built from the same weekly sales as Inventory's sales velocity (see catalog/performance.ts). Sample data.
-import { useMemo, useState, type CSSProperties, type ReactNode } from "../kit";
+import { compareSort, useMemo, useState, useTableControls, type CSSProperties, type ReactNode, type SortValue } from "../kit";
 import { useStyles } from "../ui";
 import { ITEMS, LOCS, LOC_NAME, h, money, money0, type InvMap, type Item, type Order } from "../data";
 import { MENU_BY_KEY, MENU_CATEGORIES, OPTION_OWNER, lastSoldAt, weeklyUnits } from "../catalog/menu";
@@ -324,10 +324,41 @@ export function PerformanceTab(props: { items: Record<string, DutchieInventoryIt
   const td: CSSProperties = { padding: "9px 10px", fontSize: 12.5, lineHeight: "18px", color: t.text.primary, borderBottom: `1px solid ${rowBorder}`, whiteSpace: "nowrap" };
   const num: CSSProperties = { ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" };
   const isProd = dim === "product";
-  const cols = isProd
-    ? ["#", "SKU", "Product", "Brand", "Qty units", "Qty sold", "Qty remaining", "Qty received", "Gross sales", "% of sales", "Inventory cost", "Profit margin", "Discounted amount", "Average discount %", "Sales velocity (units/wk)", "Last sold"]
-    : ["#", DIM_LABEL[dim].replace(/ies$/, "y").replace(/s$/, ""), "Qty units", "Qty sold", "Qty remaining", "Gross sales", "% of sales", "Inventory cost", "Profit margin", "Discounted amount", "Average discount %"];
-  const leftCols = isProd ? 4 : 2;
+  type ColDef = { k: string; label: string; left?: boolean; prodOnly?: boolean; title?: string; val: (x: GroupRow, rank: number) => SortValue; cell: (x: GroupRow, rank: number) => ReactNode };
+  const COLS: ColDef[] = [
+    { k: "rank", label: "#", left: true, title: "Rank by the metric picked above", val: (_, r) => r,
+      cell: (_, r) => <td key="rank" style={{ ...td, fontWeight: 700, color: r < 3 && sortBy === "high" ? TEAL : t.text.secondary }}>#{r + 1}</td> },
+    { k: "sku", label: "SKU", left: true, prodOnly: true, val: (x) => x.prod?.sku ?? null,
+      cell: (x) => <td key="sku" style={{ ...td, color: light ? "#1f6fd1" : t.text.accent, fontWeight: 600 }}>{x.prod?.sku}</td> },
+    { k: "name", label: isProd ? "Product" : DIM_LABEL[dim].replace(/ies$/, "y").replace(/s$/, ""), left: true, val: (x) => x.name.toLowerCase(),
+      cell: (x) => <td key="name" style={{ ...td, fontWeight: 600, whiteSpace: "normal", minWidth: 200 }}>{x.name}{x.prod ? <div style={{ fontSize: 11, color: t.text.secondary, fontWeight: 400 }}>{x.prod.master} · {x.prod.category}</div> : <div style={{ fontSize: 11, color: t.text.secondary, fontWeight: 400 }}>{x.products} product{x.products === 1 ? "" : "s"}</div>}</td> },
+    { k: "brand", label: "Brand", left: true, prodOnly: true, val: (x) => x.prod?.brand.toLowerCase() ?? null, cell: (x) => <td key="brand" style={td}>{x.prod?.brand}</td> },
+    { k: "units", label: "Qty units", val: (x) => x.units, cell: (x) => <td key="units" style={num} title="SKUs (size options) on the menu">{int(x.units)}</td> },
+    { k: "sold", label: "Qty sold", val: (x) => x.sold, cell: (x) => <td key="sold" style={num}>{int(x.sold)}</td> },
+    { k: "remaining", label: "Qty remaining", val: (x) => x.remaining, cell: (x) => <td key="remaining" style={{ ...num, color: x.remaining <= 0 ? t.text.danger : t.text.primary }}>{int(x.remaining)}</td> },
+    { k: "received", label: "Qty received", prodOnly: true, val: (x) => x.prod?.received ?? null,
+      cell: (x) => { const p = x.prod!; return <td key="received" style={num} title={p.lastReceived ? `Last received ${dyFmt.format(p.lastReceived)}` : undefined}>{int(p.received)}{p.lastReceived ? <div style={{ fontSize: 11, color: t.text.secondary }}>last {dFmt.format(p.lastReceived)}</div> : null}</td>; } },
+    { k: "gross", label: "Gross sales", val: (x) => x.gross, cell: (x) => <td key="gross" style={{ ...num, fontWeight: 600 }}>{money(x.gross)}</td> },
+    { k: "share", label: "% of sales", val: (x) => x.gross, cell: (x) => <td key="share" style={num}>{pct(x.gross / ranked.total)}</td> },
+    { k: "cost", label: "Inventory cost", val: (x) => x.cost, cell: (x) => <td key="cost" style={num}>{money(x.cost)}</td> },
+    { k: "margin", label: "Profit margin", val: (x) => ranked.margin(x), cell: (x) => { const m = ranked.margin(x); return <td key="margin" style={{ ...num, color: m < 0.3 ? t.text.warning : t.text.primary }}>{pct(m)}</td>; } },
+    { k: "disc", label: "Discounted amount", val: (x) => x.disc, cell: (x) => <td key="disc" style={num}>{money(x.disc)}</td> },
+    { k: "discPct", label: "Average discount %", val: (x) => (x.gross ? x.disc / x.gross : 0), cell: (x) => <td key="discPct" style={num}>{pct(x.gross ? x.disc / x.gross : 0)}</td> },
+    { k: "velocity", label: "Sales velocity (units/wk)", prodOnly: true, val: (x) => x.prod?.velocity ?? null, cell: (x) => <td key="velocity" style={num}>{x.prod!.velocity.toFixed(1)}</td> },
+    { k: "lastSold", label: "Last sold", prodOnly: true, val: (x) => x.prod?.lastSold ?? null,
+      cell: (x) => <td key="lastSold" style={{ ...num, color: x.prod!.lastSold ? t.text.primary : t.text.tertiary }}>{x.prod!.lastSold ? dyFmt.format(x.prod!.lastSold) : "Never"}</td> },
+  ];
+  const colDefs = COLS.filter((c) => isProd || !c.prodOnly);
+  const colByKey = Object.fromEntries(colDefs.map((c) => [c.k, c])) as Record<string, ColDef>;
+  const rankCtl = useTableControls(isProd ? "retail-perf-ranking-products" : "retail-perf-ranking-groups", colDefs.map((c) => c.k),
+    { defaultDir: (k) => (["rank", "sku", "name", "brand"].includes(k) ? 1 : -1), accent: TEAL });
+  const rankedRows = (() => {
+    const withRank = ranked.rows.map((x, i) => ({ x, rank: i }));
+    const s = rankCtl.sort;
+    const def = s ? colByKey[s.col] : undefined;
+    if (s && def) withRank.sort((a, b) => compareSort(def.val(a.x, a.rank), def.val(b.x, b.rank), s.dir) || a.rank - b.rank);
+    return withRank;
+  })();
 
   return (
     <div data-testid="performance-page" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -408,7 +439,7 @@ export function PerformanceTab(props: { items: Record<string, DutchieInventoryIt
       <Card title="Performance ranking" subtitle={`${rangeLabel(rRange)} · ${storeLabel} · ${ranked.count} ${DIM_LABEL[dim].toLowerCase()}${dim === "tag" ? " (tags overlap, so % of sales can add up to more than 100%)" : ""}`} testId="perf-ranking"
         actions={<>
           <Pick value={rankPeriod} options={PERIODS} onChange={setRankPeriod} testId="rank-period" />
-          <Pick value={sortBy} options={["high", "low", "margin", "discount"] as const} onChange={setSortBy} label={(v) => SORT_LABEL[v]} testId="rank-sort" />
+          <Pick value={sortBy} options={["high", "low", "margin", "discount"] as const} onChange={(v) => { setSortBy(v); rankCtl.clearSort(); }} label={(v) => SORT_LABEL[v]} testId="rank-sort" />
           <Pick value={topN} options={["Top 10", "Top 25", "All"] as const} onChange={setTopN} testId="rank-top" />
         </>}>
         <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${rowBorder}`, flexWrap: "wrap" }} role="tablist">
@@ -418,37 +449,24 @@ export function PerformanceTab(props: { items: Record<string, DutchieInventoryIt
                 borderBottom: `2px solid ${dim === d ? TEAL : "transparent"}`, marginBottom: -1 }}>{DIM_LABEL[d]}</button>
           ))}
           <span style={{ flex: 1 }} />
+          <span style={{ ...sub, alignSelf: "center" }}>Click a header to sort · drag to rearrange</span>
+          {rankCtl.sort ? <button type="button" onClick={rankCtl.clearSort} style={{ all: "unset", cursor: "pointer", alignSelf: "center", fontSize: 12, fontWeight: 600, color: light ? "#1f6fd1" : t.text.accent }}>Rank order</button> : null}
+          {rankCtl.customized ? <button type="button" data-testid="rank-reset-cols" onClick={rankCtl.reset} style={{ all: "unset", cursor: "pointer", alignSelf: "center", fontSize: 12, fontWeight: 600, color: light ? "#1f6fd1" : t.text.accent }}>Reset columns</button> : null}
           <input aria-label="Search ranking" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${DIM_LABEL[dim].toLowerCase()}…`}
             style={{ height: 30, margin: "2px 0 6px", boxSizing: "border-box", padding: "0 10px", borderRadius: 6, border: `1px solid ${light ? "#e3e6ea" : t.border.default}`, background: light ? "#f6f7f9" : t.fill.secondary, color: t.text.primary, fontSize: 12.5, outline: "none", minWidth: 180 }} />
         </div>
         <div style={{ overflow: "auto", maxHeight: "65vh" }}>
           <table data-testid="ranking-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: isProd ? 1500 : 1000 }}>
-            <thead><tr>{cols.map((c, i) => <th key={c} style={{ ...th, textAlign: i < leftCols ? "left" : "right" }}>{c}</th>)}</tr></thead>
+            <thead><tr>{rankCtl.order.map((k) => {
+              const c = colByKey[k];
+              if (!c) return null;
+              const hp = rankCtl.headerProps(k, { label: c.label });
+              return <th key={k} {...hp} title={`${c.title ? c.title + " · " : ""}${hp.title}`} style={{ ...th, textAlign: c.left ? "left" : "right", color: rankCtl.sort?.col === k ? t.text.primary : th.color, ...hp.style }}>{c.label}{rankCtl.indicator(k, TEAL)}</th>;
+            })}</tr></thead>
             <tbody>
-              {ranked.rows.length === 0 ? <tr><td colSpan={cols.length} style={{ ...td, textAlign: "center", color: t.text.secondary, padding: 24 }}>Nothing matches.</td></tr> : ranked.rows.map((x, i) => {
-                const m = ranked.margin(x);
-                const p = x.prod;
-                return (
-                  <tr key={x.key} data-testid="ranking-row">
-                    <td style={{ ...td, fontWeight: 700, color: i < 3 && sortBy === "high" ? TEAL : t.text.secondary }}>#{i + 1}</td>
-                    {p ? <td style={{ ...td, color: light ? "#1f6fd1" : t.text.accent, fontWeight: 600 }}>{p.sku}</td> : null}
-                    <td style={{ ...td, fontWeight: 600, whiteSpace: "normal", minWidth: 200 }}>{x.name}{p ? <div style={{ fontSize: 11, color: t.text.secondary, fontWeight: 400 }}>{p.master} · {p.category}</div> : <div style={{ fontSize: 11, color: t.text.secondary, fontWeight: 400 }}>{x.products} product{x.products === 1 ? "" : "s"}</div>}</td>
-                    {p ? <td style={td}>{p.brand}</td> : null}
-                    <td style={num} title="SKUs (size options) on the menu">{int(x.units)}</td>
-                    <td style={num}>{int(x.sold)}</td>
-                    <td style={{ ...num, color: x.remaining <= 0 ? t.text.danger : t.text.primary }}>{int(x.remaining)}</td>
-                    {p ? <td style={num} title={p.lastReceived ? `Last received ${dyFmt.format(p.lastReceived)}` : undefined}>{int(p.received)}{p.lastReceived ? <div style={{ fontSize: 11, color: t.text.secondary }}>last {dFmt.format(p.lastReceived)}</div> : null}</td> : null}
-                    <td style={{ ...num, fontWeight: 600 }}>{money(x.gross)}</td>
-                    <td style={num}>{pct(x.gross / ranked.total)}</td>
-                    <td style={num}>{money(x.cost)}</td>
-                    <td style={{ ...num, color: m < 0.3 ? t.text.warning : t.text.primary }}>{pct(m)}</td>
-                    <td style={num}>{money(x.disc)}</td>
-                    <td style={num}>{pct(x.gross ? x.disc / x.gross : 0)}</td>
-                    {p ? <td style={num}>{p.velocity.toFixed(1)}</td> : null}
-                    {p ? <td style={{ ...num, color: p.lastSold ? t.text.primary : t.text.tertiary }}>{p.lastSold ? dyFmt.format(p.lastSold) : "Never"}</td> : null}
-                  </tr>
-                );
-              })}
+              {rankedRows.length === 0 ? <tr><td colSpan={colDefs.length} style={{ ...td, textAlign: "center", color: t.text.secondary, padding: 24 }}>Nothing matches.</td></tr> : rankedRows.map(({ x, rank }) => (
+                <tr key={x.key} data-testid="ranking-row">{rankCtl.order.map((k) => colByKey[k]?.cell(x, rank))}</tr>
+              ))}
             </tbody>
           </table>
         </div>

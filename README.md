@@ -40,8 +40,9 @@ The Q.O.H. tab shows "Last synced with Dutchie POS at …" (simulated). It refre
 ### Retailer role
 - **Overview**: approvals awaiting action with SLA aging (24 h target), inbound shipments, and a below-Min heatmap by vendor × location.
 - **Inventory** (sub-views):
+  - **Tables**: click any column header to sort (click again to flip ascending / descending; ▲ / ▼ shows the active column). Drag a header to rearrange columns (or focus it and press Alt+← / Alt+→). Column order and sort are kept per table for the browser session (sessionStorage); "Reset columns" restores the default order.
   - **All inventory**: a Dutchie-style inventory table per store (SKU, product, brand/vendor, room, available, price, cost, sales velocity, last date sold) with search, filters, sorting, CSV export and a simulated "Last synced with Dutchie POS" line.
-  - **Below par**: every par-tracked SKU under Min, with gap to Max, cover and open orders.
+  - **Below par**: every par-tracked SKU under Min, with gap to Max, cover, Date Last Sold and open orders.
   - **Performance**: Dutchie-style reports: a KPI strip (Gross Sales, Discounted Amount, Inventory Cost, Inventory Profit) with a period picker and a daily sales bar chart; a top-sales donut (master categories / products / brands, drill-down); a performance ranking (Master Categories, Categories, Products, Brands, Tags) with qty sold / remaining / received, gross sales, % of sales, inventory cost, margin, discounts, sales velocity and last sold; monthly sales (Jan–Oct 2026) and sales by location.
 - **Orders** (sub-views):
   - **Approvals**: approve, edit line quantities, counter-propose with a note, or reject.

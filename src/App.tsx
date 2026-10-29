@@ -17,6 +17,7 @@ import { IntegrationsTab } from "./views/IntegrationsTab";
 import { AccountsTab, fdw, type AccountSpec } from "./views/AccountsTab";
 import { UpdatesSection } from "./views/UpdatesSection";
 import { UPDATES } from "./updates";
+import { OPTION_OWNER, lastSoldAt, weeklyUnits } from "./catalog/menu";
 import { Landing } from "./views/Landing";
 import { newSeed, startSession } from "./session";
 import { RoleBanner, TabHelp, rolePalette, type TabInfo } from "./views/Guide";
@@ -599,8 +600,11 @@ function LogTable(props: { log: LogEntry[]; vendorId?: string }) {
 }
 
 // ─────────────────────────── retailer views ───────────────────────────
-function BelowParTable(props: { inv: InvMap; orders: Order[]; locFilter: string }) {
+/** Same formatting as Inventory → All inventory "Last date sold". */
+const lastSoldFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
+function BelowParTable(props: { inv: InvMap; orders: Order[]; locFilter: string; now: number }) {
   const rows: TableCell[][] = [];
+  const keys: (string | number | null)[][] = [];
   for (const l of LOCS) {
     if (props.locFilter !== "all" && props.locFilter !== l.id) continue;
     for (const p of PRODUCTS) {
@@ -609,14 +613,20 @@ function BelowParTable(props: { inv: InvMap; orders: Order[]; locFilter: string 
       if (q >= par.min) continue;
       const v = perDay(p.sku, l.id);
       const oo = onOrderQty(props.orders, l.id, p.sku);
+      // Same calculation as All inventory: last sale of this menu option at this store.
+      const own = OPTION_OWNER[p.sku];
+      const sold = own ? lastSoldAt(p.sku, l.id, weeklyUnits(own.product.key, l.id) * own.option.share, props.now) : null;
+      const cover = v > 0 ? q / v : null;
       rows.push([l.name, VENDOR_BY_ID[p.vendorId].name, p.sku, p.name, q === 0 ? { text: "0", tone: "danger" } : String(q),
-        `${par.min} / ${par.max}`, String(par.max - q), v > 0 ? `${(q / v).toFixed(1)}d` : "—",
+        `${par.min} / ${par.max}`, String(par.max - q), cover !== null ? `${cover.toFixed(1)}d` : "—",
+        sold ? lastSoldFmt.format(sold) : { text: "Never", tone: undefined },
         oo > 0 ? { text: `${oo} on order`, tone: "success" } : { text: "None", tone: "warning" }]);
+      keys.push([l.name, VENDOR_BY_ID[p.vendorId].name, p.sku, p.name.toLowerCase(), q, par.min, par.max - q, cover, sold, oo]);
     }
   }
   if (rows.length === 0) return <Callout tone="success">Every SKU is at or above Min.</Callout>;
-  return <Table columns={["Location", "Vendor", "SKU", "Product", "Q.O.H.", "Min / Max", "Gap to Max", "Cover", "Open order"]}
-    align={["start", "start", "start", "start", "end", "end", "end", "end", "start"]} rows={rows} />;
+  return <Table id="retail-below-par" columns={["Location", "Vendor", "SKU", "Product", "Q.O.H.", "Min / Max", "Gap to Max", "Cover", "Date Last Sold", "Open order"]}
+    align={["start", "start", "start", "start", "end", "end", "end", "end", "end", "start"]} rows={rows} sortKeys={keys} />;
 }
 
 /** The single vendor demo account behind "Vendor log in". */
@@ -1169,7 +1179,7 @@ export default function ParLevelPortal() {
             </Grid>
             <Section heading="Inbound shipments">
               {shipped.length ? (
-                <Table columns={["Order", "Vendor", "Location", "Carrier", "Manifest", "Shipped", "ETA", "Value"]}
+                <Table id="retail-inbound-shipments" columns={["Order", "Vendor", "Location", "Carrier", "Manifest", "Shipped", "ETA", "Value"]}
                   rows={shipped.map((o) => [o.id, VENDOR_BY_ID[o.vendorId].name, LOC_NAME[o.locId], o.carrier ?? "", o.manifest ?? "", o.shippedAt ? fdt(o.shippedAt) : "", o.etaAt ? fdt(o.etaAt) : "", money(orderValue(o))])} />
               ) : <Text>Nothing in transit.</Text>}
             </Section>
@@ -1206,13 +1216,13 @@ export default function ParLevelPortal() {
         ) : null}
         {rtab === "inventory" && invSub === "belowpar" ? (
           <Section heading="Below par: inventory under Min, all par-tracked vendors" caption="Gap to Max = Max − Q.O.H. Only the par-tracked vendors have par plans; other menu brands show stock status in All inventory. Sample data.">
-            <BelowParTable inv={inv} orders={orders} locFilter={rloc} />
+            <BelowParTable inv={inv} orders={orders} locFilter={rloc} now={clock} />
           </Section>
         ) : null}
         {rtab === "orders" && ordSub === "history" ? (
           <>
             <Section heading="Order history">
-              <Table columns={["Order", "Vendor", "Location", "Submitted", "Status", "Value", "Invoice", ""]}
+              <Table id="retail-order-history" columns={["Order", "Vendor", "Location", "Submitted", "Status", "Value", "Invoice", ""]}
                 rows={hist.map((o) => [o.id, VENDOR_BY_ID[o.vendorId].name, LOC_NAME[o.locId], fdt(o.submittedAt),
                   <Status key="s" tone={STATUS_TONE[o.status]}>{o.status}</Status>, money(orderValue(o)), o.invoiceId ?? "—",
                   <Button key="b" variant="quiet" label={histSel === o.id ? "Hide" : "Details"} onClick={() => setHistSel(histSel === o.id ? "" : o.id)} />])} />

@@ -1,4 +1,5 @@
-import { Children, createContext, isValidElement, useContext, useState, type CSSProperties, type ReactNode } from "react";
+import { Children, createContext, isValidElement, useContext, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { cellText, compareSort, parseSortValue, useTableControls, type SortValue } from "./tableTools";
 import { useGrokTheme, useThemeSwitch, type GrokTheme } from "./theme";
 
 export type Tone = "success" | "warning" | "danger";
@@ -182,31 +183,84 @@ export function Grid(props: { columns?: 2 | 3 | 4 | 5 | 6 | 7; children?: ReactN
 function isToneCell(c: unknown): c is { text: string; tone?: Tone } {
   return typeof c === "object" && c !== null && !isValidElement(c) && !Array.isArray(c) && "text" in c;
 }
-export function Table(props: { columns: readonly string[]; rows: readonly (readonly TableCell[])[]; align?: readonly ("auto" | "start" | "end")[]; emphasis?: number }) {
+export function Table(props: {
+  columns: readonly string[]; rows: readonly (readonly TableCell[])[]; align?: readonly ("auto" | "start" | "end")[]; emphasis?: number;
+  /** Stable id for sessionStorage (column order + sort). Defaults to one derived from the column labels. */
+  id?: string;
+  /** Header click sorts (asc ⇄ desc). Default true. */
+  sortable?: boolean;
+  /** Explicit sort values per row/column, used instead of parsing the cell text. */
+  sortKeys?: readonly (readonly SortValue[])[];
+  /** Trailing rows (e.g. a Total row) that stay at the bottom when sorting. */
+  pinLast?: number;
+}) {
   const t = useGrokTheme();
+  const keys = useMemo(() => {
+    const seen = new Set<string>();
+    return props.columns.map((c, i) => { const k = c && !seen.has(c) ? c : `col${i}`; seen.add(k); return k; });
+  }, [props.columns]);
+  const tableId = props.id ?? `t:${props.columns.join("|")}`;
+  const ctl = useTableControls(tableId, keys, { accent: t.text.accent });
+  const idxOf = (k: string) => keys.indexOf(k);
   const al = (i: number): CSSProperties["textAlign"] => (props.align?.[i] === "end" ? "right" : "left");
+  const sortableCol = (i: number) => props.sortable !== false && !!props.columns[i];
+  const pin = Math.min(props.pinLast ?? 0, props.rows.length);
+  const order = useMemo(() => {
+    const idx = props.rows.map((_, i) => i);
+    const body = idx.slice(0, idx.length - pin);
+    const tail = idx.slice(idx.length - pin);
+    const s = ctl.sort;
+    const ci = s ? keys.indexOf(s.col) : -1;
+    if (s && ci >= 0 && sortableCol(ci)) {
+      const val = (ri: number): SortValue => props.sortKeys?.[ri]?.[ci] !== undefined ? props.sortKeys[ri][ci] : parseSortValue(cellText(props.rows[ri][ci]));
+      const vals = new Map(body.map((ri) => [ri, val(ri)]));
+      body.sort((a, b) => compareSort(vals.get(a)!, vals.get(b)!, s.dir) || a - b);
+    }
+    return [...body, ...tail];
+  }, [props.rows, props.sortKeys, ctl.sort, keys, pin, props.sortable]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div style={{ overflowX: "auto", border: `1px solid ${t.border.subtle}`, borderRadius: t.radius.md, background: t.bg.elevated }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", ...t.font.label }}>
-        <thead>
-          <tr>
-            {props.columns.map((c, i) => (
-              <th key={i} style={{ textAlign: al(i), padding: "8px 10px", color: t.text.primary, fontWeight: t.weight.semibold, borderBottom: `1px solid ${t.border.strong}`, whiteSpace: "nowrap", background: t.fill.secondary }}>{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {props.rows.map((r, ri) => (
-            <tr key={ri}>
-              {r.map((c, ci) => (
-                <td key={ci} style={{ textAlign: al(ci), padding: "8px 10px", borderTop: ri ? `1px solid ${t.border.subtle}` : "none", verticalAlign: "middle", fontWeight: props.emphasis === ci ? t.weight.semibold : undefined, color: t.text.primary }}>
-                  {isToneCell(c) ? <span style={{ color: toneColor(t, c.tone), fontWeight: c.tone ? t.weight.medium : undefined }}>{c.text}</span> : (c as ReactNode)}
-                </td>
-              ))}
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+      {ctl.customized ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, ...t.font.caption, color: t.text.secondary }}>
+          <span>Column order customized</span>
+          <button type="button" onClick={ctl.reset} style={{ all: "unset", cursor: "pointer", color: t.text.accent, fontWeight: t.weight.semibold }}>Reset columns</button>
+        </div>
+      ) : null}
+      <div style={{ overflowX: "auto", border: `1px solid ${t.border.subtle}`, borderRadius: t.radius.md, background: t.bg.elevated }}>
+        <table data-table-id={tableId} style={{ borderCollapse: "collapse", width: "100%", ...t.font.label }}>
+          <thead>
+            <tr>
+              {ctl.order.map((k) => {
+                const i = idxOf(k);
+                const hp = ctl.headerProps(k, { sortable: sortableCol(i), label: props.columns[i] });
+                return (
+                  <th key={k} {...hp} style={{ textAlign: al(i), padding: "8px 10px", color: t.text.primary, fontWeight: t.weight.semibold, borderBottom: `1px solid ${t.border.strong}`, whiteSpace: "nowrap", background: t.fill.secondary, ...hp.style }}>
+                    {props.columns[i]}{sortableCol(i) ? ctl.indicator(k, t.text.accent) : null}
+                  </th>
+                );
+              })}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {order.map((ri, pos) => {
+              const r = props.rows[ri];
+              return (
+                <tr key={ri}>
+                  {ctl.order.map((k) => {
+                    const ci = idxOf(k);
+                    const c = r[ci];
+                    return (
+                      <td key={k} style={{ textAlign: al(ci), padding: "8px 10px", borderTop: pos ? `1px solid ${t.border.subtle}` : "none", verticalAlign: "middle", fontWeight: props.emphasis === ci ? t.weight.semibold : undefined, color: t.text.primary }}>
+                        {isToneCell(c) ? <span style={{ color: toneColor(t, c.tone), fontWeight: c.tone ? t.weight.medium : undefined }}>{c.text}</span> : (c as ReactNode)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -133,7 +133,7 @@ export function FinanceTab(props: { invoices: Invoice[]; now: number; initialLoc
 
       <Grid columns={2}>
         <Section heading="Balance book" caption="QuickBooks chart of accounts with POS-derived balances · sample data">
-          <Table columns={["Account", "Type", "Balance", "Source"]} align={["start", "start", "end", "start"]}
+          <Table pinLast={1} columns={["Account", "Type", "Balance", "Source"]} align={["start", "start", "end", "start"]}
             rows={[
               ["Cash in drawers (last close)", "Bank", money(drawer), "Dutchie cash summary"],
               ["Cash in safe", "Bank", money(safe), "Safe log"],
@@ -152,7 +152,7 @@ export function FinanceTab(props: { invoices: Invoice[]; now: number; initialLoc
       </Grid>
 
       <Section heading="Vendor payables aging" caption={`Due date = invoice date + vendor terms. Demo clock ${fd(props.now)}. Payments post a QuickBooks BillPayment.`}>
-        <Table columns={["Vendor", ...BUCKETS, "Total"]} align={["start", "end", "end", "end", "end", "end", "end"]}
+        <Table pinLast={1} columns={["Vendor", ...BUCKETS, "Total"]} align={["start", "end", "end", "end", "end", "end", "end"]}
           rows={[
             ...vendorsWithOpen.map((v) => [VENDOR_BY_ID[v].name, ...BUCKETS.map((_, b) => { const x = open.filter((i) => i.vendorId === v && bucketOf(i) === b).reduce((s, i) => s + balOf(i), 0); return x ? money(x) : "—"; }),
               money(open.filter((i) => i.vendorId === v).reduce((s, i) => s + balOf(i), 0))]),
@@ -173,7 +173,7 @@ export function FinanceTab(props: { invoices: Invoice[]; now: number; initialLoc
         actions={<Segmented<"4" | "8"> value={period} onChange={setPeriod} options={[{ value: "4", label: "Last 4 weeks" }, { value: "8", label: "Last 8 weeks" }]} />}>
         <LineChart points={weeks.map((w) => ({ label: w.weekStart, value: w.grossSales }))} lines={[{ label: "Net sales", values: weeks.map((w) => w.netSales) }, { label: "Gross margin $", values: weeks.map((w) => w.netSales - w.cogs) }]}
           labels={["Gross sales"]} ceiling={Math.max(...weeks.map((w) => w.grossSales))} floor={0} format={(v) => money0(v)} />
-        <Table columns={["Week of", "Gross", "Discounts", "Returns", "Net sales", "State tax 17%", "Local tax", "COGS", "Gross margin", "GM %"]}
+        <Table pinLast={1} columns={["Week of", "Gross", "Discounts", "Returns", "Net sales", "State tax 17%", "Local tax", "COGS", "Gross margin", "GM %"]}
           align={["start", "end", "end", "end", "end", "end", "end", "end", "end", "end"]}
           rows={[...weeks.map((w) => [w.weekStart, money0(w.grossSales), `−${money0(w.discounts)}`, `−${money0(w.returns)}`, money0(w.netSales), money0(w.stateTax), money0(w.localTax), money0(w.cogs), money0(w.netSales - w.cogs), pct((w.netSales - w.cogs) / w.netSales)]),
             [{ text: "Total", tone: "success" }, money0(gross), `−${money0(sum((w) => w.discounts))}`, `−${money0(sum((w) => w.returns))}`, money0(net), money0(sum((w) => w.stateTax)), money0(sum((w) => w.localTax)), money0(cogs), money0(net - cogs), pct((net - cogs) / net)]]} />
