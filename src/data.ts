@@ -271,6 +271,17 @@ export const PRODUCTS: Product[] = MENU_SKUS.map((r) => {
   };
 });
 export const PRODUCT: Record<string, Product> = Object.fromEntries(PRODUCTS.map((p) => [p.sku, p]));
+/** Catalog-brand menu items that can appear on purchase orders (no vendor-managed pars; not in PRODUCTS). */
+export const CATALOG_ORDER_PRODUCTS: Product[] = COMPETITOR_SKUS.flatMap((r, i): Product[] => {
+  const v = VENDOR_BY_NAME[r[1]];
+  if (!v?.catalog) return [];
+  const sku = `C-${i + 1}`, category = r[2], price = r[4];
+  return [{
+    sku, vendorId: v.id, name: r[0], brand: r[1], category, sub: "", strain: "", size: r[3], price, thc: "",
+    cost: Math.round(price * (0.45 + 0.1 * h(sku + "c")) * 100) / 100, casePack: CASE_PACK[category] ?? 6, group: `${category} · ${r[3]}`,
+  }];
+});
+for (const p of CATALOG_ORDER_PRODUCTS) PRODUCT[p.sku] = p;
 
 export interface Item { key: string; name: string; brand: string; category: string; size: string; price: number; vendorId: string | null }
 export const ITEMS: Item[] = [

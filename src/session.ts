@@ -3,7 +3,7 @@
 // regenerated from it, then stay fixed until the user switches account. Orders the user created or acted on in an
 // earlier session carry over, so the approve → ship → receive loop works across role switches.
 import {
-  BASE, CARRIERS, DAY, HOUR, LOCS, LOC_NAME, PRODUCTS, PRODUCT, RETAILER, VENDORS, VENDOR_BY_ID,
+  BASE, CATALOG_ORDER_PRODUCTS, CARRIERS, DAY, HOUR, LOCS, LOC_NAME, PRODUCTS, PRODUCT, RETAILER, VENDORS, VENDOR_BY_ID,
   ln, mulberry32, orderValue, rebuildSales, seedInventory, setSessionSalt,
   type InvMap, type Invoice, type LogEntry, type Order, type OrderStatus, type Payment,
 } from "./data";
@@ -42,10 +42,10 @@ const REJECT_NOTES = ["We're over Max on {cat} at {loc}. Please resubmit after t
 const RECEIVE_NOTES = ["Received. One unit arrived damaged; credited on the invoice.", "Received short; vendor confirmed a backorder.", "Received in full, thanks."];
 const fill = (t: string, v: Record<string, string | number>) => t.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));
 
-function makeOrder(r: Rng, vendorId: string, status: OrderStatus, used: Set<number>): Order {
+function makeOrder(r: Rng, vendorId: string, status: OrderStatus, used: Set<number>, forceLoc?: string): Order {
   const v = VENDOR_BY_ID[vendorId];
-  const skus = shuffle(r, PRODUCTS.filter((p) => p.vendorId === vendorId)).slice(0, int(r, 2, 4));
-  const locId = vendorId === "iron" && r() < 0.45 ? "south" : pick(r, LOCS).id;
+  const skus = shuffle(r, [...PRODUCTS, ...CATALOG_ORDER_PRODUCTS].filter((p) => p.vendorId === vendorId)).slice(0, int(r, 2, 4));
+  const locId = forceLoc ?? (vendorId === "iron" && r() < 0.45 ? "south" : pick(r, LOCS).id);
   const lines = skus.map((p) => ln(p.sku, p.casePack * int(r, 1, p.category === "Concentrate" ? 3 : 4)));
   const mode = r() < 0.5 ? "Velocity-based" : "Order to Max";
   const loc = LOC_NAME[locId];
@@ -131,8 +131,19 @@ function generateOrders(r: Rng, reserved: Set<number>): Order[] {
   const extra = int(r, 3, 6);
   const pool: OrderStatus[] = ["Pending", "Pending", "Countered", "Approved", "Shipped", "Received", "Received", "Rejected"];
   for (const s of [...must, ...Array.from({ length: extra }, () => pick(r, pool))]) plan.push([pick(r, others), s]);
+  // Busy approvals queue: 10+ more pending orders from at least 8 distinct vendors across the broader vendor list
+  // (catalog brands with orderable SKUs plus the par-tracked four besides Ironic), spread over all three stores.
+  const orderable = new Set(CATALOG_ORDER_PRODUCTS.map((p) => p.vendorId));
+  const counts: Record<string, number> = {};
+  for (const p of CATALOG_ORDER_PRODUCTS) counts[p.vendorId] = (counts[p.vendorId] ?? 0) + 1;
+  const queueVendors = shuffle(r, [...others, ...[...orderable].filter((id) => counts[id] >= 2)]).slice(0, int(r, 8, 9));
+  const queue = [...queueVendors, ...shuffle(r, queueVendors).slice(0, 10 - Math.min(10, queueVendors.length) + int(r, 0, 2))];
+  const locOrder = shuffle(r, LOCS.map((l) => l.id));
   const used = new Set<number>(reserved);
-  const orders = plan.map(([v, s]) => makeOrder(r, v, s, used));
+  const orders = [
+    ...plan.map(([v, s]) => makeOrder(r, v, s, used)),
+    ...queue.map((v, i) => makeOrder(r, v, "Pending", used, locOrder[i % 3])),
+  ];
   // PO numbers follow submission order, with gaps (other stores' and cancelled orders).
   orders.sort((a, b) => a.submittedAt - b.submittedAt);
   let n = int(r, 1004, 1014);
