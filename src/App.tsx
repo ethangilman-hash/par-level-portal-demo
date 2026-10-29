@@ -1151,7 +1151,7 @@ export default function ParLevelPortal() {
             ]} />
             <Grid columns={2}>
               <Section heading="Below Min by vendor and location" caption="Count of SKUs under Min · sample data">
-                <Heatmap rows={VENDORS.map((v) => v.name)} columns={LOCS.map((l) => l.name)} values={VENDORS.map((v) => LOCS.map((l) => belowCount(v.id, l.id)))} />
+                <Heatmap rows={VENDORS.map((v) => v.name)} columns={LOCS.map((l) => `${l.name} · ${LOC_LICENSE[l.id]}`)} values={VENDORS.map((v) => LOCS.map((l) => belowCount(v.id, l.id)))} />
               </Section>
               <Section heading="Approval queue by age" caption={`SLA ${SLA_HOURS} hours from submission`}>
                 {pending.length ? (
