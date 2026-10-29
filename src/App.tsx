@@ -613,7 +613,7 @@ const HOW_STEPS = [
   { title: "Retailer: approve, adjust, counter or reject", detail: "Switch account → Retail log in → Approvals. Edit line quantities, add notes, and watch the approval SLA age on each order." },
   { title: "Vendor: ship", detail: "Switch back to Vendor log in → Orders. Pick a carrier and ETA; a Metrc transfer manifest with package tags is created through the integrations layer (mock)." },
   { title: "Retailer: receive", detail: "Record received and damaged units. Metrc receives the transfer, Dutchie inventory increases, and QuickBooks gets an invoice (vendor) and a bill (retailer)." },
-  { title: "Explore", detail: "Retailer: Inventory (Dutchie-style menu), Finance, Vendors accounts and Integrations. Vendor: Retailers accounts and Integrations. All provider calls are mocked; see the sync log." },
+  { title: "Explore", detail: "Retailer: Inventory (Dutchie-style inventory table), Finance, Vendors accounts and Integrations. Vendor: Retailers accounts and Integrations. All provider calls are mocked; see the sync log." },
 ];
 
 export default function ParLevelPortal() {
@@ -1025,7 +1025,7 @@ export default function ParLevelPortal() {
     const rgo = (tab: RTab) => () => setRtab(tab);
     const rHelp: Record<RTab, TabInfo> = {
       overview: { what: "your morning check: orders waiting for approval, inbound shipments and SKUs below Min across stores.", how: "use the location picker on the right to focus on one store.", next: { label: "Approvals", go: rgo("approvals") } },
-      inventory: { what: "live menu inventory per store (Dutchie-style), with each size's stock status against par.", how: "pick a store and category; Low stock / Out of stock chips show what needs reordering.", next: { label: "Below par", go: rgo("belowpar") } },
+      inventory: { what: "live inventory from Dutchie POS, laid out like Dutchie's Inventory page: SKU, product, brand/vendor, location (room), available, price, cost, sales velocity and last date sold.", how: "search, then filter by Store, Status, Vendor, Location, Category, Tags or More; click a column header to sort. Low / out-of-stock quantities are colored against par. Receive inventory opens Receiving.", next: { label: "Below par", go: rgo("belowpar") } },
       approvals: { what: "vendor orders waiting on you, oldest first, with on-hand and par next to each line.", how: "edit quantities if needed, then Approve, Send counter-proposal or Reject. The vendor ships approved orders.", next: { label: "Receiving", go: rgo("receiving") } },
       receiving: { what: "shipments in transit to your stores.", how: "count each line, enter shorts or damages, then Mark received. Stock goes up and an invoice is created.", next: { label: "Invoices", go: rgo("invoices") } },
       belowpar: { what: "every SKU under its Min, across all vendors, with the gap to Max and whether it's already on order." },
@@ -1125,7 +1125,7 @@ export default function ParLevelPortal() {
           </Section>
         ) : null}
         {rtab === "activity" ? <Section heading="Activity log"><LogTable log={log} /></Section> : null}
-        {rtab === "inventory" ? <InventoryTab items={menu} lastSync={dutchieAt} syncing={dutchieSyncing} onSync={() => void syncDutchie()} initialLoc={rloc} /> : null}
+        {rtab === "inventory" ? <InventoryTab items={menu} lastSync={dutchieAt} syncing={dutchieSyncing} onSync={() => void syncDutchie()} initialLoc={rloc} now={clock} onReceive={() => setRtab("receiving")} onReceiveHistory={() => setRtab("orders")} /> : null}
         {rtab === "finance" ? <FinanceTab key={`fin-${rloc}`} invoices={invoices} now={clock} initialLoc={rloc} pay={pay} /> : null}
         {rtab === "vendors" ? (
           <AccountsTab role="retailer" noun="vendor" me="Store manager" now={clock}
