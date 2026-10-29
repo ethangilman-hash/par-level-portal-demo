@@ -91,4 +91,4 @@ Sample data is re-rolled on every sign-in (Retail log in / Vendor log in, includ
 
 ## License
 
-Private demo. All rights reserved.
+Proprietary — all rights reserved. Source is public for viewing only; no license is granted to use, copy, modify, or distribute.
