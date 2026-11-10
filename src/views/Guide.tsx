@@ -23,7 +23,10 @@ export interface PathStep<T extends string> { tab: T; label: string; hint: strin
 /** Banner at the top of each role: who you are, what this console is for, and the suggested click path. */
 export function RoleBanner<T extends string>(props: {
   role: Role; title: string; intro: ReactNode; path: PathStep<T>[]; current: T; go: (tab: T) => void; tip?: ReactNode;
+  /** Optional Step 1 (connect your system), shown before the tab path with a done/incomplete marker. */
+  setup?: { label: string; hint: string; done: boolean; open: boolean; onClick: () => void };
 }) {
+  const off = props.setup ? 1 : 0;
   const t = useGrokTheme();
   const c = rolePalette(t, props.role);
   return (
@@ -36,15 +39,36 @@ export function RoleBanner<T extends string>(props: {
       </div>
       <div style={{ ...t.font.body2, color: c.text }}>{props.intro}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "stretch" }} aria-label="Suggested click path">
+        {props.setup ? (() => {
+          const s = props.setup;
+          const on = s.open;
+          const doneC = t.kind === "dark" ? "#22c55e" : "#15803d";
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button type="button" data-testid="guide-step-connect" onClick={s.onClick} aria-expanded={on}
+                style={{ all: "unset", cursor: "pointer", display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 12px", borderRadius: t.radius.md, maxWidth: 260,
+                  background: on ? c.solid : t.bg.elevated, color: on ? "#fff" : c.text, border: `${s.done ? 1 : 2}px ${s.done ? "solid" : "dashed"} ${on ? c.solid : s.done ? doneC : c.border}` }}>
+                <span style={{ flex: "none", width: 20, height: 20, borderRadius: 10, display: "grid", placeItems: "center", ...t.font.caption, fontWeight: t.weight.semibold,
+                  background: s.done ? doneC : on ? "#fff" : c.solid, color: s.done ? "#fff" : on ? c.solid : "#fff" }}>{s.done ? "✓" : 1}</span>
+                <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  <span style={{ ...t.font.label, fontWeight: t.weight.semibold }}>{s.label}</span>
+                  <span style={{ ...t.font.caption, opacity: on ? 0.92 : 0.85 }}>{s.hint}</span>
+                  <span style={{ ...t.font.caption, fontWeight: t.weight.semibold, color: on ? "#fff" : s.done ? doneC : c.strong }}>{s.done ? "Connected" : "Not connected yet"}</span>
+                </span>
+              </button>
+              {props.path.length ? <span aria-hidden style={{ color: c.solid, fontWeight: t.weight.semibold }}>→</span> : null}
+            </div>
+          );
+        })() : null}
         {props.path.map((s, i) => {
-          const on = s.tab === props.current;
+          const on = s.tab === props.current && !props.setup?.open;
           return (
             <div key={s.tab} style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button type="button" onClick={() => props.go(s.tab)} aria-current={on ? "step" : undefined}
                 style={{ all: "unset", cursor: "pointer", display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 12px", borderRadius: t.radius.md, maxWidth: 240,
                   background: on ? c.solid : t.bg.elevated, color: on ? "#fff" : c.text, border: `1px solid ${on ? c.solid : c.border}` }}>
                 <span style={{ flex: "none", width: 20, height: 20, borderRadius: 10, display: "grid", placeItems: "center", ...t.font.caption, fontWeight: t.weight.semibold,
-                  background: on ? "#fff" : c.solid, color: on ? c.solid : "#fff" }}>{i + 1}</span>
+                  background: on ? "#fff" : c.solid, color: on ? c.solid : "#fff" }}>{i + 1 + off}</span>
                 <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                   <span style={{ ...t.font.label, fontWeight: t.weight.semibold }}>{s.label}</span>
                   <span style={{ ...t.font.caption, opacity: on ? 0.92 : 0.85 }}>{s.hint}</span>

@@ -21,6 +21,7 @@ import { OPTION_OWNER, lastSoldAt, weeklyUnits } from "./catalog/menu";
 import { Landing } from "./views/Landing";
 import { newSeed, startSession } from "./session";
 import { RoleBanner, TabHelp, rolePalette, type TabInfo } from "./views/Guide";
+import { ConnectPanel, useConnections, isConnected, connectedSummary, RETAIL_PLATFORMS, VENDOR_PLATFORMS } from "./views/ConnectStep";
 import {
   FREQ_DAYS, accKey, lastDelivery, openEta, schedule, seedLocationContacts, seedRetailerNotes, seedRetailerPrefs, seedVendorContacts, seedVendorNotes, seedVendorPrefs,
   type AccountNote, type AccountPrefs, type Contact,
@@ -635,6 +636,7 @@ const DEMO_VENDOR_LOC = "south";
 
 const HOW_STEPS = [
   { title: "Pick a role on the start page", detail: "Retail log in opens the store manager console; Vendor log in opens the Ironic vendor portal. No passwords; it's sample data." },
+  { title: "Step 1 after log in: connect your system (simulated)", detail: "Retail: connect the Dutchie API with read-only access (inventory, sales, menu; it never writes to the POS). Vendor: connect LeafLink, Apex, Marjin and/or Distru, choosing read-only (see store inventory and send order requests) or read/write (also push the approved order through on that platform). No credentials are asked for and no real connection is made; it's optional and lasts for the browser session." },
   { title: "Vendor: choose a store location and review reports", detail: "Q.O.H., Par Levels (Min / Max / Max Strains), Category Insights, Invoice Logs and Email Settings, modeled on a typical vendor portal." },
   { title: "Vendor: build and submit an order", detail: "Suggested quantities come from Order to Max or velocity + lead time + safety stock, rounded to case packs and checked against the minimum order." },
   { title: "Retailer: approve, adjust, counter or reject", detail: "Switch account → Retail log in → Orders → Approvals. Edit line quantities, add notes, and watch the approval SLA age on each order." },
@@ -654,6 +656,10 @@ export default function ParLevelPortal() {
   const [rtab, setRtab] = useState<RTab>("overview");
   const [invSub, setInvSub] = useState<InvSub>("all");
   const [ordSub, setOrdSub] = useState<OrdSub>("approvals");
+  const conns = useConnections();
+  const retailConnected = isConnected(conns, RETAIL_PLATFORMS);
+  const vendorConnected = isConnected(conns, VENDOR_PLATFORMS);
+  const [showConnect, setShowConnect] = useState(false);
   const rnav = (n: RNav) => {
     const [tab, sub] = n.split(":");
     setRtab(tab as RTab);
@@ -690,7 +696,11 @@ export default function ParLevelPortal() {
     return () => clearInterval(id);
   }, [stage]);
   useEffect(() => {
-    if (stage === "loading" && progress >= 100) setStage("portal");
+    if (stage === "loading" && progress >= 100) {
+      // Step 1 opens on arrival until that role's system is connected (never blocks the rest of the demo).
+      setShowConnect(!(account === "retailer" ? retailConnected : vendorConnected));
+      setStage("portal");
+    }
   }, [progress, stage]);
 
   const tick = (): number => {
@@ -986,15 +996,17 @@ export default function ParLevelPortal() {
     const vLabels: Record<VTab, string> = { dash: "Dashboard", qoh: "Q.O.H.", par: "Par Levels", insights: "Category Insights", order: "Suggested Order", orders: "Orders", invoices: "Invoice Logs", retailers: "Retailers", alerts: "Alerts & Activity", settings: "Email Settings", integrations: "Integrations" };
     body = (
       <>
-        <RoleBanner<VTab> role="vendor" title={`Vendor portal · ${vendor.name} at ${LOC_NAME[loc]}`} current={vtab} go={setVtab}
+        <RoleBanner<VTab> role="vendor" title={`Vendor portal · ${vendor.name} at ${LOC_NAME[loc]}`} current={vtab} go={(tab) => { setShowConnect(false); setVtab(tab); }}
+          setup={{ label: "Connect platform", hint: "LeafLink, Apex, Marjin and/or Distru · read-only or read/write", done: vendorConnected, open: showConnect, onClick: () => setShowConnect((x) => !x) }}
           intro={<>You're the brand. See how your products are stocking at each {RETAILER} store, build the restock order, and ship it once the store approves. <strong>Suggested path:</strong></>}
           path={[
-            { tab: "qoh", label: "1. See inventory", hint: "Q.O.H. & par for your SKUs" },
-            { tab: "order", label: "2. Build order", hint: "Suggested qty → submit" },
-            { tab: "orders", label: "3. Ship", hint: "after the retailer approves" },
-            { tab: "retailers", label: "4. Manage accounts", hint: "delivery prefs, contacts" },
+            { tab: "qoh", label: "See inventory", hint: "Q.O.H. & par for your SKUs" },
+            { tab: "order", label: "Build order", hint: "Suggested qty → submit" },
+            { tab: "orders", label: "Ship", hint: "after the retailer approves" },
+            { tab: "retailers", label: "Manage accounts", hint: "delivery prefs, contacts" },
           ]}
-          tip={<>Approvals happen on the retailer side: after you submit, use Switch account → Retail log in → Orders → Approvals, then come back here to ship.</>} />
+          tip={<>{vendorConnected ? <>Connected: {connectedSummary(conns, VENDOR_PLATFORMS)} (demo). </> : <>Step 1 is optional in this demo; everything else works without it. </>}Approvals happen on the retailer side: after you submit, use Switch account → Retail log in → Orders → Approvals, then come back here to ship.</>} />
+        {showConnect ? <ConnectPanel role="vendor" onClose={() => setShowConnect(false)} /> : null}
         <Segmented<VTab> value={vtab} onChange={setVtab} options={[
           { value: "dash", label: "Dashboard" }, { value: "qoh", label: "Q.O.H." }, { value: "par", label: "Par Levels" },
           { value: "insights", label: "Category Insights" }, { value: "order", label: "Suggested Order" },
@@ -1108,16 +1120,18 @@ export default function ParLevelPortal() {
     const pathCur: RNav | "inventory" = rtab === "inventory" ? "inventory" : cur;
     body = (
       <>
-        <RoleBanner<RNav | "inventory"> role="retailer" title={`Retailer console · ${RETAILER}`} current={pathCur} go={(n) => rnav(n === "inventory" ? "inventory:all" : n)}
+        <RoleBanner<RNav | "inventory"> role="retailer" title={`Retailer console · ${RETAILER}`} current={pathCur} go={(n) => { setShowConnect(false); rnav(n === "inventory" ? "inventory:all" : n); }}
+          setup={{ label: "Connect Dutchie API", hint: "read-only access only: inventory, sales, menu", done: retailConnected, open: showConnect, onClick: () => setShowConnect((x) => !x) }}
           intro={<>You're the store manager for {LOCS.map((l) => l.name).join(", ")}. Vendors propose restock orders; you approve them and check them in. <strong>Suggested path:</strong></>}
           path={[
-            { tab: "inventory", label: "1. See inventory", hint: "stock vs par, below par, performance" },
-            { tab: "orders:approvals", label: "2. Approve orders", hint: `Orders → Approvals${pending.length ? ` · ${pending.length} waiting` : ""}` },
-            { tab: "orders:receiving", label: "3. Receive", hint: "Orders → Receiving, after the vendor ships" },
-            { tab: "finance", label: "4. Finance", hint: "payables, sales, margin" },
-            { tab: "vendors", label: "5. Vendors", hint: "preferences & auto-approve" },
+            { tab: "inventory", label: "See inventory", hint: "stock vs par, below par, performance" },
+            { tab: "orders:approvals", label: "Approve orders", hint: `Orders → Approvals${pending.length ? ` · ${pending.length} waiting` : ""}` },
+            { tab: "orders:receiving", label: "Receive", hint: "Orders → Receiving, after the vendor ships" },
+            { tab: "finance", label: "Finance", hint: "payables, sales, margin" },
+            { tab: "vendors", label: "Vendors", hint: "preferences & auto-approve" },
           ]}
-          tip={<>Shipping happens on the vendor side: after you approve an Ironic order, use Switch account → Vendor log in → Orders to ship it, then come back to Orders → Receiving.</>} />
+          tip={<>{retailConnected ? <>Connected: Dutchie (read-only, demo). </> : <>Step 1 is optional in this demo; everything else works without it. </>}Shipping happens on the vendor side: after you approve an Ironic order, use Switch account → Vendor log in → Orders to ship it, then come back to Orders → Receiving.</>} />
+        {showConnect ? <ConnectPanel role="retailer" onClose={() => setShowConnect(false)} /> : null}
         <div style={{ ...row, justifyContent: "space-between" }}>
           <Segmented<RTab> value={rtab} onChange={setRtab} options={[
             { value: "overview", label: "Overview" }, { value: "inventory", label: "Inventory" },

@@ -3,15 +3,28 @@ import { Section, Table, Status, Segmented, Callout, Text, useState } from "../k
 import { useStyles, localStamp } from "../ui";
 import { PROVIDERS, PROVIDER_ORDER, PROXY_URL_ENV, useSyncLog, type ProviderId } from "../integrations";
 import { FIELD_MAP, USED_BY } from "../integrations/mapping";
+import { useConnections, PLATFORM_NAME, RETAIL_PLATFORMS, VENDOR_PLATFORMS } from "./ConnectStep";
 
 export function IntegrationsTab(props: { role: "vendor" | "retailer" }) {
   const { t, small, strong, row } = useStyles();
   const log = useSyncLog();
   const [sel, setSel] = useState<ProviderId>("dutchie");
   const [logFilter, setLogFilter] = useState<"all" | ProviderId>("all");
+  const conns = useConnections();
+  const stepIds = props.role === "retailer" ? RETAIL_PLATFORMS : VENDOR_PLATFORMS;
   const shown = log.filter((e) => logFilter === "all" || e.provider === logFilter).slice(0, 25);
   return (
     <>
+      <div data-testid="integrations-step1" style={{ ...row, flexWrap: "wrap", gap: 8 }}>
+        <span style={strong}>Step 1 connections ({props.role === "retailer" ? "read-only" : "per-platform access"}):</span>
+        {stepIds.map((id) => {
+          const c = conns[id];
+          return <Status key={id} tone={c?.status === "connected" ? "success" : c?.status === "connecting" ? "warning" : "neutral"}>
+            {PLATFORM_NAME[id]}: {c?.status === "connected" ? (c.scope === "read" ? "read-only" : "read/write") : c?.status === "connecting" ? "connecting…" : "not connected"}
+          </Status>;
+        })}
+        <span style={small}>Simulated; set from the Step 1 card in the guide. Adapters below stay in mock mode either way.</span>
+      </div>
       <Callout tone="info" lead="Demo mode.">
         Every action in this demo runs through the adapter layer in src/integrations. All four providers use mock adapters backed by sample data; no network calls are made.
         One switch, VITE_INTEGRATIONS_MODE=mock|live (per-provider overrides like VITE_DUTCHIE_MODE), selects live adapters, which would call a server-side proxy ({PROXY_URL_ENV}) that holds the keys.
