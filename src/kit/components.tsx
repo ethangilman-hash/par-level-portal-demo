@@ -193,6 +193,8 @@ export function Table(props: {
   sortKeys?: readonly (readonly SortValue[])[];
   /** Trailing rows (e.g. a Total row) that stay at the bottom when sorting. */
   pinLast?: number;
+  /** Optional small, muted second line under each header label (e.g. a license number). */
+  subheads?: readonly (string | undefined)[];
 }) {
   const t = useGrokTheme();
   const keys = useMemo(() => {
@@ -236,6 +238,7 @@ export function Table(props: {
                 return (
                   <th key={k} {...hp} style={{ textAlign: al(i), padding: "8px 10px", color: t.text.primary, fontWeight: t.weight.semibold, borderBottom: `1px solid ${t.border.strong}`, whiteSpace: "nowrap", background: t.fill.secondary, ...hp.style }}>
                     {props.columns[i]}{sortableCol(i) ? ctl.indicator(k, t.text.accent) : null}
+                    {props.subheads?.[i] ? <div style={{ ...t.font.caption, fontWeight: t.weight.regular, color: t.text.tertiary }}>{props.subheads[i]}</div> : null}
                   </th>
                 );
               })}

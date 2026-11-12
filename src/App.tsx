@@ -683,6 +683,7 @@ export default function ParLevelPortal() {
     if (tab === "orders" && sub) setOrdSub(sub as OrdSub);
   };
   const [rloc, setRloc] = useState<string>("all");
+  const [ovShowAll, setOvShowAll] = useState(false);
   const [orderFilter, setOrderFilter] = useState<"open" | "all" | "closed">("open");
   const [histSel, setHistSel] = useState<string>("");
   const [apprQ, setApprQ] = useState("");
@@ -1113,7 +1114,7 @@ export default function ParLevelPortal() {
     const rgo = (n: RNav) => () => rnav(n);
     const cur: RNav = rtab === "inventory" ? `inventory:${invSub}` : rtab === "orders" ? `orders:${ordSub}` : rtab;
     const rHelp: Record<RNav, TabInfo> = {
-      overview: { what: "your morning check: orders waiting for approval, inbound shipments and SKUs below Min across stores.", how: "use the location picker on the right to focus on one store.", next: { label: "Orders → Approvals", go: rgo("orders:approvals") } },
+      overview: { what: "your morning check across your 3 stores: orders waiting for your OK, products running low, and deliveries on the way.", how: "click a line on a store card to jump straight to that store's details, or use the store picker on the right.", next: { label: "Orders → Approvals", go: rgo("orders:approvals") } },
       "inventory:all": { what: "live inventory from Dutchie POS, laid out like Dutchie's Inventory page: SKU, product, brand/vendor, location (room), available, price, cost, sales velocity and last date sold.", how: "search, then filter by Store, Status, Vendor, Location, Category, Tags or More; click a column header to sort. Low / out-of-stock quantities are colored against par. Receive inventory opens Orders → Receiving.", next: { label: "Below par", go: rgo("inventory:belowpar") } },
       "inventory:belowpar": { what: "every par-tracked SKU under its Min, across all vendors, with the gap to Max and whether it's already on order.", next: { label: "Performance", go: rgo("inventory:performance") } },
       "inventory:performance": { what: "Dutchie-style sales reports: KPIs (gross sales, discounts, inventory cost and profit), daily sales, top sales breakdown, a performance ranking with quantity received, sales velocity and last sold, plus monthly and by-location trends.", how: "pick a period on each card; click a donut row to drill into a category or brand; switch the ranking between Master Categories, Categories, Products, Brands and Tags.", next: { label: "Orders → Approvals", go: rgo("orders:approvals") } },
@@ -1154,7 +1155,7 @@ export default function ParLevelPortal() {
             { value: "orders", label: "Orders", count: pending.length + shipped.length || undefined }, { value: "finance", label: "Finance" }, { value: "vendors", label: "Vendors" },
             { value: "activity", label: "Activity" }, { value: "integrations", label: "Integrations" },
           ]} />
-          <Select options={[{ value: "all", label: "All locations" }, ...LOCS.map((l) => ({ value: l.id, label: l.name }))]} value={rloc} onChange={setRloc} />
+          <Select options={[{ value: "all", label: "All 3 stores" }, ...LOCS.map((l) => ({ value: l.id, label: `${l.name} store` }))]} value={rloc} onChange={setRloc} />
         </div>
         {rtab === "inventory" ? (
           <div data-testid="inventory-subnav"><Segmented<InvSub> value={invSub} onChange={setInvSub} options={[
@@ -1168,53 +1169,133 @@ export default function ParLevelPortal() {
           ]} /></div>
         ) : null}
         <TabHelp role="retailer" tab={rLabels[cur]} info={rHelp[cur]} />
-        {rtab === "overview" ? (
+        {rtab === "overview" ? (() => {
+          // Plain-language overview for a buyer: every number comes from this sign-in's sample data.
+          const LATE_H = SLA_HOURS;
+          const waitingAt = (lid: string) => orders.filter((o) => o.status === "Pending" && o.locId === lid);
+          const lowAt = (lid: string) => VENDORS.reduce((s, v) => s + belowCount(v.id, lid), 0);
+          const outAt = (lid: string) => PRODUCTS.filter((p) => inv[`${lid}|${p.sku}`].qoh <= 0).length;
+          const comingAt = (lid: string) => orders.filter((o) => o.status === "Shipped" && o.locId === lid).length;
+          const go = (lid: string, n: RNav) => { setRloc(lid); rnav(n); };
+          const waitingAll = pending.filter((o) => o.status === "Pending");
+          const lateAll = waitingAll.filter((o) => clock - o.submittedAt >= LATE_H * HOUR).length;
+          const counteredAll = pending.length - waitingAll.length;
+          const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+          const lowRows = VENDORS.map((v) => {
+            const per = LOCS.map((l) => belowCount(v.id, l.id));
+            return { v, per, total: per.reduce((a, b) => a + b, 0) };
+          }).sort((a, b) => b.total - a.total || a.v.name.localeCompare(b.v.name));
+          const lowMax = Math.max(1, ...lowRows.flatMap((r) => r.per));
+          const lowShown = ovShowAll ? lowRows : lowRows.filter((r) => r.total > 0).slice(0, 5);
+          const hiddenLow = lowRows.length - lowShown.length;
+          const storeTotals = LOCS.map((l) => lowAt(l.id));
+          const lowCell = (n: number) => (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "flex-end", minWidth: 120 }}>
+              <span style={{ width: 70, height: 8, borderRadius: 4, background: t.fill.secondary, overflow: "hidden", display: "inline-block" }}>
+                <span style={{ display: "block", height: "100%", width: `${(n / lowMax) * 100}%`, background: n ? t.text.warning : "transparent" }} />
+              </span>
+              <span style={{ fontWeight: t.weight.semibold, color: n ? t.text.primary : t.text.tertiary, minWidth: 64, textAlign: "right" }}>{n ? plural(n, "product", "products") : "none"}</span>
+            </span>
+          );
+          const linkBtn = (label: ReactNode, onClick: () => void, tone: "danger" | "warning" | "ok" | "info", testId?: string) => (
+            <button type="button" onClick={onClick} data-testid={testId}
+              style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", margin: "0 -8px", borderRadius: t.radius.sm, ...t.font.body2,
+                color: tone === "danger" ? t.text.danger : tone === "warning" ? t.text.warning : tone === "ok" ? t.text.success : t.text.primary }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = t.fill.secondary; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+              <span style={{ flex: 1 }}>{label}</span><span aria-hidden style={{ color: t.text.tertiary }}>›</span>
+            </button>
+          );
+          const help = (tip: string) => <span title={tip} aria-label={tip} style={{ display: "inline-grid", placeItems: "center", width: 16, height: 16, borderRadius: 8, marginLeft: 6, fontSize: 11, fontWeight: t.weight.semibold, background: t.fill.secondary, color: t.text.secondary, cursor: "help", verticalAlign: "middle" }}>?</span>;
+          return (
           <>
-            <div data-testid="store-licenses" style={{ display: "grid", gridTemplateColumns: `repeat(${LOCS.length}, minmax(0, 1fr))`, gap: 12 }}>
-              {LOCS.map((l) => {
-                const below = VENDORS.reduce((s, v) => s + belowCount(v.id, l.id), 0);
-                const waiting = pending.filter((o) => o.locId === l.id).length;
-                return (
-                  <div key={l.id} data-testid={`store-${l.id}`} style={{ ...card, gap: 2, padding: "12px 16px", borderLeft: `4px solid ${rc.solid}` }}>
-                    <span style={{ ...strong, fontSize: t.font.heading3.fontSize }}>{l.name}</span>
-                    <span style={{ ...small, fontFamily: t.font.mono, color: t.text.primary }}>License {LOC_LICENSE[l.id]}</span>
-                    <span style={small}>Adult-use retail · {waiting} awaiting approval · {below} SKUs below Min</span>
-                  </div>
-                );
-              })}
-            </div>
+            <section data-testid="store-licenses" aria-label="Your stores" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ ...t.font.heading3, fontWeight: t.weight.semibold, color: t.text.primary }}>Your {LOCS.length} stores</span>
+                <span style={small}>You run {LOCS.length} shops: {LOCS.map((l) => `${l.name}`).join(", ")}. Each card is one store. Click a line to see the details for that store.</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(260px, 1fr))`, gap: 12 }}>
+                {LOCS.map((l) => {
+                  const w = waitingAt(l.id);
+                  const late = w.filter((o) => clock - o.submittedAt >= LATE_H * HOUR).length;
+                  const low = lowAt(l.id), out = outAt(l.id), coming = comingAt(l.id);
+                  const on = rloc === l.id;
+                  return (
+                    <div key={l.id} data-testid={`store-${l.id}`} style={{ ...card, gap: 6, padding: "14px 16px", borderTop: `4px solid ${rc.solid}`, outline: on ? `2px solid ${rc.solid}` : undefined }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span aria-hidden style={{ width: 38, height: 38, borderRadius: 10, background: rc.bg, color: rc.solid, display: "grid", placeItems: "center", flex: "none" }}>
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 9.5 4.5 4h15L21 9.5" /><path d="M3 9.5c0 1.4 1.1 2.5 2.5 2.5S8 10.9 8 9.5c0 1.4 1.1 2.5 2.5 2.5h3c1.4 0 2.5-1.1 2.5-2.5 0 1.4 1.1 2.5 2.5 2.5S21 10.9 21 9.5" />
+                            <path d="M4.5 12v8h15v-8" /><path d="M10 20v-5h4v5" />
+                          </svg>
+                        </span>
+                        <span style={{ display: "flex", flexDirection: "column" }}>
+                          <span style={{ ...strong, fontSize: t.font.heading3.fontSize, lineHeight: t.font.heading3.lineHeight }}>{l.name} store</span>
+                          <span style={{ ...t.font.caption, color: t.text.tertiary }}>State license {LOC_LICENSE[l.id]}</span>
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        {linkBtn(<><strong>{w.length}</strong> {w.length === 1 ? "order" : "orders"} waiting for your OK{late ? ` (${late} waiting over ${LATE_H} hours)` : ""}</>, () => go(l.id, "orders:approvals"), w.length ? (late ? "danger" : "warning") : "ok", `store-${l.id}-waiting`)}
+                        {linkBtn(<><strong>{low}</strong> {low === 1 ? "product" : "products"} running low{out ? ` (${out} sold out)` : ""}</>, () => go(l.id, "inventory:belowpar"), low ? "warning" : "ok", `store-${l.id}-low`)}
+                        {linkBtn(<><strong>{coming}</strong> {coming === 1 ? "delivery" : "deliveries"} on the way</>, () => go(l.id, "orders:receiving"), "info", `store-${l.id}-coming`)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {rloc !== "all" ? <div style={small}>Showing {LOC_NAME[rloc]} store only in the other tabs. <button type="button" onClick={() => setRloc("all")} style={{ all: "unset", cursor: "pointer", color: t.text.accent, fontWeight: t.weight.semibold }}>Show all stores</button></div> : null}
+            </section>
             <Metrics metrics={[
-              { value: String(pending.length), label: "Awaiting approval", detail: breached ? `${breached} past ${SLA_HOURS}h SLA` : "all within SLA", tone: breached ? "danger" : "success" },
-              { value: `${avgAppr.toFixed(1)}h`, label: "Avg time to approve", detail: `target under ${SLA_HOURS}h` },
-              { value: String(shipped.length + approvedWaiting.length), label: "Inbound orders", detail: `${shipped.length} in transit · ${approvedWaiting.length} awaiting ship` },
-              { value: String(totalBelow), label: "SKUs below Min", detail: `${money0(ap)} open payables` },
+              { value: String(waitingAll.length), label: "Orders waiting for your OK", detail: lateAll ? `${lateAll} waiting longer than ${LATE_H} hours` : `none waiting longer than ${LATE_H} hours${counteredAll ? ` · ${counteredAll} sent back to the vendor with your changes` : ""}`, tone: lateAll ? "danger" : "success" },
+              { value: `${avgAppr.toFixed(1)} hours`, label: "Average time you take to approve", detail: `goal: under ${LATE_H} hours` },
+              { value: String(shipped.length + approvedWaiting.length), label: "Deliveries coming", detail: `${shipped.length} on the truck · ${approvedWaiting.length} approved, not shipped yet` },
+              { value: String(totalBelow), label: "Products running low", detail: `${money0(ap)} owed to vendors (unpaid invoices)` },
             ]} />
-            <Grid columns={2}>
-              <Section heading="Below Min by vendor and location" caption="Count of items under Min (a bulk flower strain counts once) · sample data">
-                <Heatmap rows={VENDORS.map((v) => v.name)} columns={LOCS.map((l) => `${l.name} · ${LOC_LICENSE[l.id]}`)} values={VENDORS.map((v) => LOCS.map((l) => belowCount(v.id, l.id)))} />
-              </Section>
-              <Section heading="Approval queue by age" caption={`SLA ${SLA_HOURS} hours from submission`}>
+            <Section heading="Products running low at each store, by vendor">
+              <div style={{ ...t.font.body2, color: t.text.primary }}>
+                <strong>Running low</strong> = fewer on the shelf than the minimum you set for that product. Each number is how many of that vendor's products are running low at that store (a bulk flower strain counts once).{help("The minimum is the 'Min' on a product's par level (Vendors and Inventory → Below par). Click a column header to sort.")}
+              </div>
+              <Table id="retail-overview-low-by-vendor"
+                columns={["Vendor", ...LOCS.map((l) => `${l.name} store`), "All stores"]}
+                subheads={[undefined, ...LOCS.map((l) => `State license ${LOC_LICENSE[l.id]}`), "total"]}
+                align={["start", ...LOCS.map(() => "end" as const), "end"]}
+                pinLast={1}
+                rows={[
+                  ...lowShown.map((r) => [<strong key="v">{r.v.name}</strong>, ...r.per.map((n, i) => <span key={i}>{lowCell(n)}</span>), <strong key="t">{plural(r.total, "product", "products")}</strong>]),
+                  [<strong key="v">All vendors</strong>, ...storeTotals.map((n, i) => <strong key={i}>{plural(n, "product", "products")}</strong>), <strong key="t">{plural(storeTotals.reduce((a, b) => a + b, 0), "product", "products")}</strong>],
+                ]}
+                sortKeys={[...lowShown.map((r) => [r.v.name.toLowerCase(), ...r.per, r.total]), ["", ...storeTotals, 0]]} />
+              <div style={{ ...row, justifyContent: "space-between" }}>
+                <span style={small}>Worst first. {hiddenLow > 0 && !ovShowAll ? `${plural(hiddenLow, "vendor has", "vendors have")} nothing running low and ${hiddenLow === 1 ? "is" : "are"} hidden.` : ""}</span>
+                <div style={row}>
+                  {hiddenLow > 0 || ovShowAll ? <Button variant="quiet" label={ovShowAll ? "Show only vendors with products running low" : `Show all ${lowRows.length} vendors`} onClick={() => setOvShowAll(!ovShowAll)} /> : null}
+                  <Button label="See the products → Inventory → Below par" onClick={() => rnav("inventory:belowpar")} />
+                </div>
+              </div>
+            </Section>
+            <>
+              <Section heading="Orders waiting for your OK" caption={`Oldest first. Red = waiting longer than ${LATE_H} hours.`}>
                 {pending.length ? (
                   <Rows rows={pending.map((o) => {
                     const age = clock - o.submittedAt;
                     return {
-                      lead: o.id, title: `${VENDOR_BY_ID[o.vendorId].name} → ${LOC_NAME[o.locId]}`,
-                      detail: `${o.lines.length} lines · ${money(orderValue(o))} · ${o.status === "Countered" ? "counter sent" : o.mode}`,
-                      status: { label: `${ageLabel(age)} old`, tone: age >= SLA_HOURS * HOUR ? "danger" as const : age >= 12 * HOUR ? "warning" as const : "success" as const },
+                      lead: o.id, title: `${VENDOR_BY_ID[o.vendorId].name} → ${LOC_NAME[o.locId]} store`,
+                      detail: `${plural(o.lines.length, "product", "products")} · ${money(orderValue(o))} · ${o.status === "Countered" ? "you sent changes; waiting on the vendor" : "needs your OK"}`,
+                      status: { label: `waiting ${ageLabel(age)}`, tone: age >= LATE_H * HOUR ? "danger" as const : age >= 12 * HOUR ? "warning" as const : "success" as const },
                     };
                   })} />
-                ) : <Text>Queue is clear.</Text>}
-                <div style={row}><Button variant="primary" label="Open Orders → Approvals" onClick={() => rnav("orders:approvals")} /></div>
+                ) : <Text>Nothing is waiting for you.</Text>}
+                <div style={row}><Button variant="primary" label="Review orders (Orders → Approvals)" onClick={() => rnav("orders:approvals")} /></div>
               </Section>
-            </Grid>
-            <Section heading="Inbound shipments">
-              {shipped.length ? (
-                <Table id="retail-inbound-shipments" columns={["Order", "Vendor", "Location", "Carrier", "Manifest", "Shipped", "ETA", "Value"]}
-                  rows={shipped.map((o) => [o.id, VENDOR_BY_ID[o.vendorId].name, LOC_NAME[o.locId], o.carrier ?? "", o.manifest ?? "", o.shippedAt ? fdt(o.shippedAt) : "", o.etaAt ? fdt(o.etaAt) : "", money(orderValue(o))])} />
-              ) : <Text>Nothing in transit.</Text>}
-            </Section>
+              <Section heading="Deliveries on the way" caption="Shipped by the vendor; check them in at Orders → Receiving when they arrive.">
+                {shipped.length ? (
+                  <Table id="retail-inbound-shipments" columns={["Order", "Vendor", "Store", "Delivery company", "Shipped", "Expected", "Value"]}
+                    rows={shipped.map((o) => [o.id, VENDOR_BY_ID[o.vendorId].name, `${LOC_NAME[o.locId]} store`, o.carrier ?? "", o.shippedAt ? fdt(o.shippedAt) : "", o.etaAt ? fdt(o.etaAt) : "", money(orderValue(o))])} />
+                ) : <Text>Nothing on the way.</Text>}
+              </Section>
+            </>
           </>
-        ) : null}
+          );
+        })() : null}
         {rtab === "orders" && ordSub === "approvals" ? (
           <Section heading="Approval queue" caption="Oldest first. Lines show Q.O.H. and par at the receiving location.">
             <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 12, alignItems: "end" }}>

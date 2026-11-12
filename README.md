@@ -42,7 +42,7 @@ The start page has two options: **Retail log in** (the retailer's store manager)
 The Q.O.H. tab shows "Last synced with Dutchie POS at …" (simulated). It refreshes every 60 s and on **Sync now**.
 
 ### Retailer role
-- **Overview**: approvals awaiting action with SLA aging (24 h target), inbound shipments, and a below-Min heatmap by vendor × location.
+- **Overview**: written for a non-technical buyer. "Your 3 stores" cards (store icon, name, small state license) with clickable plain-language lines (orders waiting for your OK, products running low, deliveries on the way), a summary strip, a sortable "Products running low at each store, by vendor" table (worst first, labeled counts with small bars, store totals, show all), orders waiting for your OK (red when waiting over 24 hours), and deliveries on the way.
 - **Inventory** (sub-views):
   - **Tables**: click any column header to sort (click again to flip ascending / descending; ▲ / ▼ shows the active column). Drag a header to rearrange columns (or focus it and press Alt+← / Alt+→). Column order and sort are kept per table for the browser session (sessionStorage); "Reset columns" restores the default order.
   - **All inventory**: a Dutchie-style inventory table per store (SKU, product, brand/vendor, room, available, price, cost, sales velocity, last date sold) with search, filters, sorting, CSV export and a simulated "Last synced with Dutchie POS" line.
