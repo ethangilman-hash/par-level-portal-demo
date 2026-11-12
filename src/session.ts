@@ -4,7 +4,7 @@
 // earlier session carry over, so the approve → ship → receive loop works across role switches.
 import {
   BASE, CATALOG_ORDER_PRODUCTS, CARRIERS, DAY, HOUR, LOCS, LOC_NAME, PRODUCTS, PRODUCT, RETAILER, VENDORS, VENDOR_BY_ID,
-  ln, mulberry32, orderValue, rebuildSales, seedInventory, setSessionSalt,
+  ln, mulberry32, orderValue, fmtQtyShort, rebuildSales, seedInventory, setSessionSalt,
   type InvMap, type Invoice, type LogEntry, type Order, type OrderStatus, type Payment,
 } from "./data";
 import { rebuildPerformance } from "./catalog/performance";
@@ -55,7 +55,7 @@ function makeOrder(r: Rng, vendorId: string, status: OrderStatus, used: Set<numb
     const l = lines[i];
     const a = Math.max(PRODUCT[l.sku].casePack, l.requested - PRODUCT[l.sku].casePack * int(r, 1, 2));
     l.approved = Math.min(a, l.requested - 1);
-    return { p: PRODUCT[l.sku].name, r: l.requested, a: l.approved, loc };
+    return { p: PRODUCT[l.sku].name, r: fmtQtyShort(l.sku, l.requested), a: fmtQtyShort(l.sku, l.approved), loc };
   };
   switch (status) {
     case "Pending": {
@@ -97,7 +97,10 @@ function makeOrder(r: Rng, vendorId: string, status: OrderStatus, used: Set<numb
       for (const l of lines) {
         l.received = l.approved; l.damaged = 0;
         const roll = r();
-        if (roll < 0.12) { l.received = l.approved - 1; issues.push(`Short 1 × ${PRODUCT[l.sku].name}`); }
+        if (PRODUCT[l.sku].bulk) {
+          // Bulk flower is checked in on a scale: occasionally a few grams light.
+          if (roll < 0.2) { const g = int(r, 2, 9); l.received = l.approved - g; issues.push(`Short ${g} g × ${PRODUCT[l.sku].name} (weighed light)`); }
+        } else if (roll < 0.12) { l.received = l.approved - 1; issues.push(`Short 1 × ${PRODUCT[l.sku].name}`); }
         else if (roll < 0.22) { l.damaged = 1; issues.push(`1 × ${PRODUCT[l.sku].name} damaged`); }
       }
       if (issues.length) {

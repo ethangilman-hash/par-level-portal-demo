@@ -22,6 +22,8 @@ npm run preview    # serve the production build
 ### Sign in
 The start page has two options: **Retail log in** (the retailer's store manager) and **Vendor log in** (the Ironic demo vendor account). Click a card to enter; there are no passwords. Each role opens with a guide banner showing the suggested click path, and every tab has a one-line "what this is for" strip.
 
+**Bulk flower vs packaged goods.** Flower is not pre-packaged: stores weigh it out of a jar, so each strain is one item per store tracked by total weight in grams (shown with oz/lb, e.g. "448 g (16 oz)"). Par, below-par gap, sales velocity, received quantity, order lines, receiving and invoices for flower are all in grams, priced per gram, and ordered in ¼ lb (112 g) steps. Pre-rolls, carts, edibles, extracts and other packaged goods stay one row per SKU and size. Tables show a Type / Unit badge (Bulk flower · by weight vs Packaged).
+
 **Step 1 after log in is "connect your system"** (simulated, `src/views/ConnectStep.tsx`). Retail connects the Dutchie API with read-only access only. Vendors connect LeafLink, Apex, Marjin and/or Distru and choose per platform: read-only (see a store's current inventory and send order requests) or read/write (also push the approved order through on that platform). There are no credential fields and no real connection; status lasts for the browser session and shows on the Integrations tab. Connecting is optional, and the guide marks Step 1 with a check once done.
 
 ### Vendor role

@@ -53,6 +53,9 @@ export const MENU_SKUS: readonly (readonly [string, string, string, string, stri
   ["IRN-105", "iron", "Twisted Maui Wowie Infused Glass Tip Blunt 2.3g", "Ironic", "Pre-Rolls", "blunts", "Sativa", "2.3g", 14, "34.2%"],
   ["IRN-106", "iron", "Mango Haze Infused Glass Tip Blunt 2.3g", "Ironic", "Pre-Rolls", "blunts", "Sativa-Hybrid", "2.3g", 14, "33.1%"],
   ["IRN-107", "iron", "Purple Punch Infused Glass Tip Blunt 2.3g", "Ironic", "Pre-Rolls", "blunts", "Indica", "2.3g", 14, "35.0%"],
+  // Flower is sold from bulk jars (weighed out at the counter); size here is the menu's eighth price basis.
+  ["IRN-108", "iron", "Sarcastic Sherbet", "Ironic", "Flower", "", "Indica-Hybrid", "1/8oz", 35, "29.1%"],
+  ["IRN-109", "iron", "Deadpan Diesel", "Ironic", "Flower", "", "Sativa", "1/8oz", 28, "27.4%"],
 ];
 // Competitor SKUs on the same menu (parody brands), used in Category Insights. Tuple: name, brand, category, size, shelfPrice
 export const COMPETITOR_SKUS: readonly (readonly [string, string, string, string, number])[] = [
@@ -257,17 +260,47 @@ export function ageLabel(ms: number): string {
   return `${Math.round(hrs / 24)}d`;
 }
 
+// ── Bulk flower vs packaged goods ───────────────────────────────────────────
+// Flower is not pre-packaged: stores weigh it out of a jar, so each strain is ONE item per store tracked in grams
+// (on hand, par, velocity, orders, receiving, invoices). Everything else (pre-rolls, carts, edibles, extracts …)
+// is packaged and tracked per SKU by size. Industry convention: 28 g per oz, 16 oz (448 g) per lb.
+export const G_PER_OZ = 28;
+export const G_PER_LB = 448;
+/** Bulk flower order increment ("case pack"): a quarter pound. */
+export const BULK_STEP = 112;
+/** Grams sold per "unit" of the base demand model for bulk flower (typical deli sale ≈ a quarter-ounce). */
+const BULK_G_PER_SALE = 7;
+export const isBulkCategory = (category: string): boolean => category === "Flower";
+const r2 = (n: number) => Math.round(n * 100) / 100;
+/** Menu flower prices are per eighth; bulk is priced per gram. */
+const perGram = (eighth: number) => r2(eighth / 3.5);
+export const BULK_SIZE = "Bulk · by weight";
+/** Wholesale cost as a share of shelf price: ~45–55% for packaged goods; bulk flower ~22–30% (≈ $300–1,500/lb wholesale). */
+export const costRatio = (key: string, bulk: boolean): number => (bulk ? 0.22 + 0.08 * h(key + "c") : 0.45 + 0.1 * h(key + "c"));
+
 export interface Product {
   sku: string; vendorId: string; name: string; brand: string; category: string; sub: string; strain: string;
-  size: string; price: number; thc: string; cost: number; casePack: number; group: string;
+  /** Packaged: the size on the label. Bulk flower: BULK_SIZE. */
+  size: string;
+  /** Shelf price: per unit (packaged) or per gram (bulk flower). */
+  price: number; thc: string;
+  /** Wholesale cost: per unit (packaged) or per gram (bulk flower). */
+  cost: number;
+  /** Order increment: units per case (packaged) or grams (bulk flower, a quarter pound). */
+  casePack: number; group: string;
+  /** True for bulk flower: every quantity on this product is in grams. */
+  bulk: boolean;
 }
 export const PRODUCTS: Product[] = MENU_SKUS.map((r) => {
-  const [sku, vendorId, name, brand, category, sub, strain, size, price, thc] = r;
-  const cost = Math.round(price * (0.45 + 0.1 * h(sku + "c")) * 100) / 100;
+  const [sku, vendorId, name, brand, category, sub, strain, size0, price0, thc] = r;
+  const bulk = isBulkCategory(category);
+  const price = bulk ? perGram(price0) : price0;
+  const size = bulk ? BULK_SIZE : size0;
+  const cost = r2(price * costRatio(sku, bulk));
   return {
-    sku, vendorId, name, brand, category, sub, strain, size, price, thc, cost,
-    casePack: CASE_PACK[category] ?? 6,
-    group: `${category}${sub ? " · " + sub : ""} · ${size}`,
+    sku, vendorId, name, brand, category, sub: bulk ? "bulk-flower" : sub, strain, size, price, thc, cost, bulk,
+    casePack: bulk ? BULK_STEP : CASE_PACK[category] ?? 6,
+    group: bulk ? "Flower · Bulk by weight (g)" : `${category}${sub ? " · " + sub : ""} · ${size}`,
   };
 });
 export const PRODUCT: Record<string, Product> = Object.fromEntries(PRODUCTS.map((p) => [p.sku, p]));
@@ -275,19 +308,46 @@ export const PRODUCT: Record<string, Product> = Object.fromEntries(PRODUCTS.map(
 export const CATALOG_ORDER_PRODUCTS: Product[] = COMPETITOR_SKUS.flatMap((r, i): Product[] => {
   const v = VENDOR_BY_NAME[r[1]];
   if (!v?.catalog) return [];
-  const sku = `C-${i + 1}`, category = r[2], price = r[4];
+  const sku = `C-${i + 1}`, category = r[2], bulk = isBulkCategory(category), price = bulk ? perGram(r[4]) : r[4];
+  const size = bulk ? BULK_SIZE : r[3];
   return [{
-    sku, vendorId: v.id, name: r[0], brand: r[1], category, sub: "", strain: "", size: r[3], price, thc: "",
-    cost: Math.round(price * (0.45 + 0.1 * h(sku + "c")) * 100) / 100, casePack: CASE_PACK[category] ?? 6, group: `${category} · ${r[3]}`,
+    sku, vendorId: v.id, name: r[0], brand: r[1], category, sub: bulk ? "bulk-flower" : "", strain: "", size, price, thc: "", bulk,
+    cost: r2(price * costRatio(sku, bulk)), casePack: bulk ? BULK_STEP : CASE_PACK[category] ?? 6, group: bulk ? "Flower · Bulk by weight (g)" : `${category} · ${size}`,
   }];
 });
 for (const p of CATALOG_ORDER_PRODUCTS) PRODUCT[p.sku] = p;
 
-export interface Item { key: string; name: string; brand: string; category: string; size: string; price: number; vendorId: string | null }
+/** A menu item. Bulk flower items are priced per gram and their sales are in grams. */
+export interface Item { key: string; name: string; brand: string; category: string; size: string; price: number; vendorId: string | null; bulk: boolean }
 export const ITEMS: Item[] = [
-  ...PRODUCTS.map((p): Item => ({ key: p.sku, name: p.name, brand: p.brand, category: p.category, size: p.size, price: p.price, vendorId: p.vendorId })),
-  ...COMPETITOR_SKUS.map((r, i): Item => ({ key: `C-${i + 1}`, name: r[0], brand: r[1], category: r[2], size: r[3], price: r[4], vendorId: null })),
+  ...PRODUCTS.map((p): Item => ({ key: p.sku, name: p.name, brand: p.brand, category: p.category, size: p.size, price: p.price, vendorId: p.vendorId, bulk: p.bulk })),
+  ...COMPETITOR_SKUS.map((r, i): Item => {
+    const bulk = isBulkCategory(r[2]);
+    return { key: `C-${i + 1}`, name: r[0], brand: r[1], category: r[2], size: bulk ? BULK_SIZE : r[3], price: bulk ? perGram(r[4]) : r[4], vendorId: null, bulk };
+  }),
 ];
+/** Is this key (vendor SKU, catalog SKU or menu item) bulk flower tracked by weight? */
+export const isBulk = (key: string): boolean => (PRODUCT[key]?.bulk ?? ITEM[key]?.bulk) === true;
+
+// ── quantity formatting
+const t1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString("en-US", { maximumFractionDigits: 1 });
+/** Weight in oz (up to 1 lb) or lb + oz: 448 → "16 oz", 560 → "1 lb 4 oz". */
+export function weightLabel(g: number): string {
+  if (g <= G_PER_LB) return `${t1(g / G_PER_OZ)} oz`;
+  const lb = Math.floor(g / G_PER_LB);
+  const oz = (g - lb * G_PER_LB) / G_PER_OZ;
+  return oz >= 0.05 ? `${lb} lb ${t1(oz)} oz` : `${lb} lb`;
+}
+/** "448 g (16 oz)"; small amounts stay in grams only. */
+export const fmtGrams = (g: number): string => `${Math.round(g).toLocaleString("en-US")} g${Math.abs(g) >= 14 ? ` (${weightLabel(Math.abs(g))})` : ""}`;
+/** A quantity of `key` for display: grams (with oz/lb) for bulk flower, plain units otherwise. */
+export const fmtQty = (key: string, n: number): string => (isBulk(key) ? fmtGrams(n) : Math.round(n).toLocaleString("en-US"));
+/** Short form without the oz/lb part ("448 g" / "12"). */
+export const fmtQtyShort = (key: string, n: number): string => (isBulk(key) ? `${Math.round(n).toLocaleString("en-US")} g` : Math.round(n).toLocaleString("en-US"));
+/** Unit noun for a key: "g" for bulk flower, "units" for packaged. */
+export const qtyUnit = (key: string): string => (isBulk(key) ? "g" : "units");
+/** Type label shown in tables. */
+export const typeLabel = (key: string): string => (isBulk(key) ? "Bulk flower · by weight" : "Packaged");
 export const ITEM: Record<string, Item> = Object.fromEntries(ITEMS.map((i) => [i.key, i]));
 
 // Weekly unit sales per item, per location, for the last 8 weeks (sample).
@@ -301,7 +361,8 @@ export function buildSales(): Record<string, Record<string, number[]>> {
   const catMood = (c: string) => (salted ? 0.7 + 0.6 * sh("cat" + c) : 1);
   for (const it of ITEMS) {
     if (it.vendorId === "iron") continue;
-    const base = (CAT_BASE[it.category] ?? 3) * (0.5 + 1.1 * sh(it.key + "b")) * catMood(it.category);
+    // Bulk flower demand is in grams: the base sale count × grams per typical deli sale.
+    const base = (CAT_BASE[it.category] ?? 3) * (it.bulk ? BULK_G_PER_SALE : 1) * (0.5 + 1.1 * sh(it.key + "b")) * catMood(it.category);
     const trend = (sh(it.key + "t") - 0.5) * 0.9;
     const row: Record<string, number[]> = {};
     for (const l of LOCS) {
@@ -353,6 +414,12 @@ for (const l of LOCS) {
     for (const g of groups) {
       const ps = PRODUCTS.filter((p) => p.vendorId === v.id && p.group === g);
       const avgWeekly = ps.reduce((s, p) => s + last4(SALES[p.sku][l.id]), 0) / ps.length;
+      if (ps[0].bulk) {
+        // Bulk flower par in grams, on whole ounces: Max ≈ 2.2 weeks of sales, Min ≈ 40% of Max.
+        const max = Math.max(4 * G_PER_OZ, Math.ceil((avgWeekly * 2.2) / G_PER_OZ) * G_PER_OZ);
+        PARS[`${l.id}|${v.id}|${g}`] = { min: Math.max(G_PER_OZ, Math.round((max * 0.4) / 14) * 14), max, maxStrains: ps.length + (h(g + l.id) > 0.6 ? 1 : 0) };
+        continue;
+      }
       const max = Math.max(4, Math.ceil(avgWeekly * 2.2));
       PARS[`${l.id}|${v.id}|${g}`] = { min: Math.max(2, Math.round(max * 0.4)), max, maxStrains: ps.length + (h(g + l.id) > 0.6 ? 1 : 0) };
     }
@@ -365,9 +432,18 @@ export function rebuildSales(): void {
   SALES = buildSales();
   buildPars();
 }
+/** Par for items without a vendor-managed par plan (catalog-brand SKUs on orders): about 2.2 weeks of sales. */
+function salesPar(loc: string, sku: string): ParLevel {
+  const w = last4(SALES[sku]?.[loc] ?? [0, 0, 0, 0, 0, 0, 0, 0]);
+  if (PRODUCT[sku]?.bulk) {
+    const max = Math.max(2 * G_PER_OZ, Math.ceil((w * 2.2) / G_PER_OZ) * G_PER_OZ);
+    return { min: Math.max(G_PER_OZ, Math.round((max * 0.4) / 14) * 14), max, maxStrains: 1 };
+  }
+  return { min: Math.max(2, Math.round(w * 0.8)), max: Math.max(4, Math.ceil(w * 2.2)), maxStrains: 1 };
+}
 export const parOf = (loc: string, sku: string): ParLevel => {
   const p = PRODUCT[sku];
-  return PARS[`${loc}|${p.vendorId}|${p.group}`];
+  return (p && PARS[`${loc}|${p.vendorId}|${p.group}`]) || salesPar(loc, sku);
 };
 
 export interface Stock { qoh: number; received: number }
@@ -375,10 +451,13 @@ export type InvMap = Record<string, Stock>;
 export function seedInventory(): InvMap {
   const m: InvMap = {};
   for (const l of LOCS) {
-    for (const p of PRODUCTS) {
+    // Vendor SKUs plus catalog-brand SKUs that can appear on purchase orders (so approvals/receiving always have stock).
+    for (const p of [...PRODUCTS, ...CATALOG_ORDER_PRODUCTS]) {
       const par = parOf(l.id, p.sku);
       const f = sh(p.sku + l.id + "q");
-      const qoh = Math.round(par.max * (f < 0.42 ? f * 0.9 : 0.4 + f * 0.75));
+      const raw = par.max * (f < 0.42 ? f * 0.9 : 0.4 + f * 0.75);
+      // Bulk jars are weighed to the tenth of a gram.
+      const qoh = p.bulk ? Math.round(raw * 10) / 10 : Math.round(raw);
       m[`${l.id}|${p.sku}`] = { qoh, received: BASE - Math.round((3 + sh(p.sku + l.id + "r") * 20) * DAY) };
     }
   }
@@ -441,7 +520,7 @@ export function seedOrders(): Order[] {
     },
     {
       id: "PO-1041", vendorId: "rbd", locId: "south", status: "Received", mode: "Order to Max",
-      lines: [ln("RBD-101", 12, 12, 12), ln("RBD-104", 10, 10, 10, 1), ln("RBD-106", 10, 10, 9)], submittedAt: BASE - 9 * DAY,
+      lines: [ln("RBD-101", 224, 224, 224), ln("RBD-104", 10, 10, 10, 1), ln("RBD-106", 10, 10, 9)], submittedAt: BASE - 9 * DAY,
       approvedAt: BASE - 8.8 * DAY, shippedAt: BASE - 8 * DAY, receivedAt: BASE - 6 * DAY, carrier: CARRIERS[1], manifest: "0004810904",
       etaAt: BASE - 6 * DAY, invoiceId: "INV-29102", discrepancy: "Short 1 × Honey Banana Cured Resin Budder; 1 × Supreme Lee Hi Cured Resin Budder damaged",
       notes: [{ by: RETAILER, text: "Received. One budder jar arrived cracked; credited on the invoice.", at: BASE - 6 * DAY }],
@@ -524,6 +603,8 @@ export interface Suggestion { p: Product; qoh: number; onOrder: number; vday: nu
 export interface SuggestOpts { mode: "max" | "velocity"; safety: number; review: number; roundCase: boolean; capMax: boolean }
 export function suggest(p: Product, loc: string, inv: InvMap, orders: Order[], o: SuggestOpts): Suggestion {
   const qoh = inv[`${loc}|${p.sku}`].qoh;
+  const u = p.bulk ? " g" : "";
+  const n = (x: number) => (p.bulk ? `${Math.round(x).toLocaleString("en-US")} g` : String(x));
   const onOrder = onOrderQty(orders, loc, p.sku);
   const par = parOf(loc, p.sku);
   const vday = perDay(p.sku, loc);
@@ -533,11 +614,11 @@ export function suggest(p: Product, loc: string, inv: InvMap, orders: Order[], o
   let raw = 0;
   let math = "";
   if (o.mode === "max") {
-    if (qoh >= par.min) math = `Q.O.H. ${qoh} ≥ Min ${par.min} → no reorder`;
-    else if (pos >= par.max) math = `Q.O.H. ${qoh} < Min ${par.min}, but ${onOrder} already on order reaches Max`;
+    if (qoh >= par.min) math = `Q.O.H. ${n(qoh)} ≥ Min ${n(par.min)} → no reorder`;
+    else if (pos >= par.max) math = `Q.O.H. ${n(qoh)} < Min ${n(par.min)}, but ${n(onOrder)} already on order reaches Max`;
     else {
-      raw = par.max - pos;
-      math = `Q.O.H. ${qoh} < Min ${par.min} → Max ${par.max} − ${qoh} on hand − ${onOrder} on order = ${raw}`;
+      raw = Math.ceil(par.max - pos);
+      math = `Q.O.H. ${n(qoh)} < Min ${n(par.min)} → Max ${n(par.max)} − ${n(qoh)} on hand − ${n(onOrder)} on order = ${n(raw)}`;
     }
   } else {
     const demand = vday * (lead + o.review);
@@ -546,13 +627,14 @@ export function suggest(p: Product, loc: string, inv: InvMap, orders: Order[], o
     const capped = o.capMax && target > par.max;
     if (capped) target = par.max;
     raw = Math.max(0, target - pos);
-    math = `${vday.toFixed(1)}/day × (${lead}d lead + ${o.review}d review) = ${demand.toFixed(1)}, + safety ${vday.toFixed(1)} × ${o.safety}d = ${ss.toFixed(1)} → target ${target}${capped ? " (capped at Max)" : ""} − ${pos} position = ${raw}`;
+    raw = Math.ceil(raw);
+    math = `${vday.toFixed(1)}${u}/day × (${lead}d lead + ${o.review}d review) = ${demand.toFixed(1)}${u}, + safety ${vday.toFixed(1)} × ${o.safety}d = ${ss.toFixed(1)}${u} → target ${n(target)}${capped ? " (capped at Max)" : ""} − ${n(pos)} position = ${n(raw)}`;
   }
   let suggested = raw;
   if (o.roundCase && raw > 0) {
     const cases = Math.ceil(raw / p.casePack);
     suggested = cases * p.casePack;
-    math += ` → ${cases} case${cases > 1 ? "s" : ""} of ${p.casePack} = ${suggested}`;
+    math += p.bulk ? ` → ${cases} × ¼ lb (${p.casePack} g) = ${fmtGrams(suggested)}` : ` → ${cases} case${cases > 1 ? "s" : ""} of ${p.casePack} = ${suggested}`;
   }
   return { p, qoh, onOrder, vday, cover, par, suggested, math };
 }

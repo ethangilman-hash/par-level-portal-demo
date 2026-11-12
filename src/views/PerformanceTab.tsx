@@ -4,7 +4,7 @@
 // Built from the same weekly sales as Inventory's sales velocity (see catalog/performance.ts). Sample data.
 import { compareSort, useMemo, useState, useTableControls, type CSSProperties, type ReactNode, type SortValue } from "../kit";
 import { useStyles } from "../ui";
-import { ITEMS, LOCS, LOC_NAME, h, money, money0, type InvMap, type Item, type Order } from "../data";
+import { ITEMS, LOCS, LOC_NAME, h, money, money0, weightLabel, type InvMap, type Item, type Order } from "../data";
 import { MENU_BY_KEY, MENU_CATEGORIES, OPTION_OWNER, lastSoldAt, weeklyUnits } from "../catalog/menu";
 import { DAY_MS, LAST, MONTHS, PERIODS, TODAY, dayMs, dayTotals, discRate, monthRange, periodRange, prevRange, rangeTotals, receipts, unitCostOf, unitsIn, type Period } from "../catalog/performance";
 import type { DutchieInventoryItem } from "../integrations";
@@ -33,7 +33,8 @@ interface ProdRow {
   sold: number; gross: number; disc: number; cost: number; remaining: number; units: number;
   received: number; lastReceived: number | null; velocity: number; lastSold: number | null;
 }
-interface GroupRow { key: string; name: string; units: number; sold: number; remaining: number; gross: number; disc: number; cost: number; products: number; prod?: ProdRow }
+/** sold / remaining count packaged units; soldG / remainingG count bulk flower grams (kept apart so units and grams never add up). */
+interface GroupRow { key: string; name: string; units: number; sold: number; remaining: number; soldG: number; remainingG: number; gross: number; disc: number; cost: number; products: number; prod?: ProdRow }
 
 function buildProducts(locs: string[], from: number, to: number, items: Record<string, DutchieInventoryItem[]>, inv: InvMap, orders: Order[], now: number): ProdRow[] {
   const remainingBy: Record<string, number> = {};
@@ -61,8 +62,8 @@ function buildProducts(locs: string[], from: number, to: number, items: Record<s
           for (const ln of o.lines) if (ln.sku === it.key) received += Math.max(0, ln.received - ln.damaged);
       }
       for (const opt of m?.options ?? []) {
-        const v = m.bulk ? wk * 3.5 : wk * opt.share;
-        const ls = lastSoldAt(m.bulk ? `${it.key}-bulk-${l}` : opt.id, l, v, now);
+        const v = m.bulk ? wk : wk * opt.share;
+        const ls = lastSoldAt(opt.id, l, v, now);
         if (ls) lastSold = Math.max(lastSold ?? 0, ls);
       }
     }
@@ -70,9 +71,9 @@ function buildProducts(locs: string[], from: number, to: number, items: Record<s
     const tags: string[] = [];
     const perStore = velocity / Math.max(1, locs.length);
     if (it.vendorId) tags.push("Par-tracked vendor");
-    if (perStore >= 6) tags.push("Top seller");
-    if (perStore < 1) tags.push("Slow mover");
-    if (m?.bulk) tags.push("Bulk");
+    if (it.bulk ? perStore >= 100 : perStore >= 6) tags.push("Top seller");
+    if (it.bulk ? perStore < 14 : perStore < 1) tags.push("Slow mover");
+    tags.push(it.bulk ? "Bulk flower" : "Packaged");
     if (dr >= 0.11) tags.push("On promo");
     for (const g of m?.strainGroups ?? []) tags.push(g);
     return {
@@ -85,13 +86,16 @@ function buildProducts(locs: string[], from: number, to: number, items: Record<s
 }
 
 function group(rows: ProdRow[], dim: Dim): GroupRow[] {
-  if (dim === "product") return rows.map((r) => ({ key: r.it.key, name: r.it.name, units: r.units, sold: r.sold, remaining: r.remaining, gross: r.gross, disc: r.disc, cost: r.cost, products: 1, prod: r }));
+  const b = (r: ProdRow) => r.it.bulk;
+  if (dim === "product") return rows.map((r) => ({ key: r.it.key, name: r.it.name, units: r.units, sold: b(r) ? 0 : r.sold, remaining: b(r) ? 0 : r.remaining, soldG: b(r) ? r.sold : 0, remainingG: b(r) ? r.remaining : 0, gross: r.gross, disc: r.disc, cost: r.cost, products: 1, prod: r }));
   const m = new Map<string, GroupRow>();
   for (const r of rows) {
     const keys = dim === "master" ? [r.master] : dim === "category" ? [`${r.category}`] : dim === "brand" ? [r.brand] : r.tags;
     for (const k of keys) {
-      const g = m.get(k) ?? { key: k, name: k, units: 0, sold: 0, remaining: 0, gross: 0, disc: 0, cost: 0, products: 0 };
-      g.units += r.units; g.sold += r.sold; g.remaining += r.remaining; g.gross += r.gross; g.disc += r.disc; g.cost += r.cost; g.products += 1;
+      const g = m.get(k) ?? { key: k, name: k, units: 0, sold: 0, remaining: 0, soldG: 0, remainingG: 0, gross: 0, disc: 0, cost: 0, products: 0 };
+      g.units += r.units;
+      if (b(r)) { g.soldG += r.sold; g.remainingG += r.remaining; } else { g.sold += r.sold; g.remaining += r.remaining; }
+      g.gross += r.gross; g.disc += r.disc; g.cost += r.cost; g.products += 1;
       m.set(k, g);
     }
   }
@@ -324,6 +328,9 @@ export function PerformanceTab(props: { items: Record<string, DutchieInventoryIt
   const td: CSSProperties = { padding: "9px 10px", fontSize: 12.5, lineHeight: "18px", color: t.text.primary, borderBottom: `1px solid ${rowBorder}`, whiteSpace: "nowrap" };
   const num: CSSProperties = { ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" };
   const isProd = dim === "product";
+  const gramsCell = (g: number) => <>{int(g)} g{g >= 14 ? <div style={{ fontSize: 11, color: t.text.secondary }}>{weightLabel(g)}</div> : null}</>;
+  /** Packaged units and/or bulk grams, never summed together. */
+  const qty2 = (u: number, g: number): ReactNode => (g > 0 && u > 0 ? <>{int(u)} u<div style={{ fontSize: 11, color: t.text.secondary }}>+ {int(g)} g flower</div></> : g > 0 ? gramsCell(g) : int(u));
   type ColDef = { k: string; label: string; left?: boolean; prodOnly?: boolean; title?: string; val: (x: GroupRow, rank: number) => SortValue; cell: (x: GroupRow, rank: number) => ReactNode };
   const COLS: ColDef[] = [
     { k: "rank", label: "#", left: true, title: "Rank by the metric picked above", val: (_, r) => r,
@@ -333,18 +340,21 @@ export function PerformanceTab(props: { items: Record<string, DutchieInventoryIt
     { k: "name", label: isProd ? "Product" : DIM_LABEL[dim].replace(/ies$/, "y").replace(/s$/, ""), left: true, val: (x) => x.name.toLowerCase(),
       cell: (x) => <td key="name" style={{ ...td, fontWeight: 600, whiteSpace: "normal", minWidth: 200 }}>{x.name}{x.prod ? <div style={{ fontSize: 11, color: t.text.secondary, fontWeight: 400 }}>{x.prod.master} · {x.prod.category}</div> : <div style={{ fontSize: 11, color: t.text.secondary, fontWeight: 400 }}>{x.products} product{x.products === 1 ? "" : "s"}</div>}</td> },
     { k: "brand", label: "Brand", left: true, prodOnly: true, val: (x) => x.prod?.brand.toLowerCase() ?? null, cell: (x) => <td key="brand" style={td}>{x.prod?.brand}</td> },
-    { k: "units", label: "Qty units", val: (x) => x.units, cell: (x) => <td key="units" style={num} title="SKUs (size options) on the menu">{int(x.units)}</td> },
-    { k: "sold", label: "Qty sold", val: (x) => x.sold, cell: (x) => <td key="sold" style={num}>{int(x.sold)}</td> },
-    { k: "remaining", label: "Qty remaining", val: (x) => x.remaining, cell: (x) => <td key="remaining" style={{ ...num, color: x.remaining <= 0 ? t.text.danger : t.text.primary }}>{int(x.remaining)}</td> },
+    { k: "type", label: "Type", left: true, prodOnly: true, title: "Bulk flower = one strain by weight (grams); Packaged = per SKU / size", val: (x) => (x.prod?.it.bulk ? "bulk" : "packaged"),
+      cell: (x) => <td key="type" style={td}><span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999, background: x.prod?.it.bulk ? (light ? "#ecfdf5" : "#0f2a22") : (light ? "#eef2ff" : "#181a3a"), color: x.prod?.it.bulk ? (light ? "#047857" : "#6ee7b7") : (light ? "#4338ca" : "#a5b4fc") }}>{x.prod?.it.bulk ? "Bulk flower · g" : "Packaged"}</span></td> },
+    { k: "units", label: "Qty units", val: (x) => x.units, cell: (x) => <td key="units" style={num} title="Menu items: one per bulk flower strain, one per size for packaged goods">{int(x.units)}</td> },
+    { k: "sold", label: "Qty sold", val: (x) => x.sold + x.soldG, cell: (x) => <td key="sold" style={num}>{qty2(x.sold, x.soldG)}</td> },
+    { k: "remaining", label: "Qty remaining", val: (x) => x.remaining + x.remainingG, cell: (x) => <td key="remaining" style={{ ...num, color: x.remaining + x.remainingG <= 0 ? t.text.danger : t.text.primary }}>{qty2(x.remaining, x.remainingG)}</td> },
     { k: "received", label: "Qty received", prodOnly: true, val: (x) => x.prod?.received ?? null,
-      cell: (x) => { const p = x.prod!; return <td key="received" style={num} title={p.lastReceived ? `Last received ${dyFmt.format(p.lastReceived)}` : undefined}>{int(p.received)}{p.lastReceived ? <div style={{ fontSize: 11, color: t.text.secondary }}>last {dFmt.format(p.lastReceived)}</div> : null}</td>; } },
+      cell: (x) => { const p = x.prod!; return <td key="received" style={num} title={p.lastReceived ? `Last received ${dyFmt.format(p.lastReceived)}` : undefined}>{p.it.bulk ? gramsCell(p.received) : int(p.received)}{p.lastReceived ? <div style={{ fontSize: 11, color: t.text.secondary }}>last {dFmt.format(p.lastReceived)}</div> : null}</td>; } },
     { k: "gross", label: "Gross sales", val: (x) => x.gross, cell: (x) => <td key="gross" style={{ ...num, fontWeight: 600 }}>{money(x.gross)}</td> },
     { k: "share", label: "% of sales", val: (x) => x.gross, cell: (x) => <td key="share" style={num}>{pct(x.gross / ranked.total)}</td> },
     { k: "cost", label: "Inventory cost", val: (x) => x.cost, cell: (x) => <td key="cost" style={num}>{money(x.cost)}</td> },
     { k: "margin", label: "Profit margin", val: (x) => ranked.margin(x), cell: (x) => { const m = ranked.margin(x); return <td key="margin" style={{ ...num, color: m < 0.3 ? t.text.warning : t.text.primary }}>{pct(m)}</td>; } },
     { k: "disc", label: "Discounted amount", val: (x) => x.disc, cell: (x) => <td key="disc" style={num}>{money(x.disc)}</td> },
     { k: "discPct", label: "Average discount %", val: (x) => (x.gross ? x.disc / x.gross : 0), cell: (x) => <td key="discPct" style={num}>{pct(x.gross ? x.disc / x.gross : 0)}</td> },
-    { k: "velocity", label: "Sales velocity (units/wk)", prodOnly: true, val: (x) => x.prod?.velocity ?? null, cell: (x) => <td key="velocity" style={num}>{x.prod!.velocity.toFixed(1)}</td> },
+    { k: "velocity", label: "Sales velocity (/wk)", prodOnly: true, title: "Units/week for packaged goods, grams/week for bulk flower", val: (x) => x.prod?.velocity ?? null,
+      cell: (x) => <td key="velocity" style={num}>{x.prod!.velocity.toFixed(1)}<span style={{ color: t.text.secondary }}>{x.prod!.it.bulk ? " g" : " u"}</span></td> },
     { k: "lastSold", label: "Last sold", prodOnly: true, val: (x) => x.prod?.lastSold ?? null,
       cell: (x) => <td key="lastSold" style={{ ...num, color: x.prod!.lastSold ? t.text.primary : t.text.tertiary }}>{x.prod!.lastSold ? dyFmt.format(x.prod!.lastSold) : "Never"}</td> },
   ];
@@ -471,8 +481,8 @@ export function PerformanceTab(props: { items: Record<string, DutchieInventoryIt
           </table>
         </div>
         <span style={sub}>
-          Qty units = size options on the menu · Qty remaining = on hand now (Dutchie) · Profit margin = (gross − discounts − inventory cost) ÷ net sales
-          {isProd ? " · Qty received = units checked in during the period · Sales velocity = last 4-week average units/week (same as All inventory)" : ""}. Sample data.
+          Qty units = menu items (one per bulk flower strain, one per size for packaged) · Bulk flower quantities are grams, packaged are units · Qty remaining = on hand now (Dutchie) · Profit margin = (gross − discounts − inventory cost) ÷ net sales
+          {isProd ? " · Qty received = units (or grams for bulk flower) checked in during the period · Sales velocity = last 4-week average per week (same as All inventory)" : ""}. Sample data.
         </span>
       </Card>
       <span style={{ ...sub, textAlign: "right" }}>Categories follow the menu's master categories ({MENU_CATEGORIES.join(", ")}). Report day ends {dFmt.format(dayMs(TODAY))} 12:00 AM PT.</span>

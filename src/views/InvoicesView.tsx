@@ -3,7 +3,7 @@
 // Archived invoices whose order predates the demo get sample line detail rebuilt from the vendor's catalog.
 import { Section, Segmented, Table, Button, Status, Properties, Callout, Text, useState } from "../kit";
 import { useStyles } from "../ui";
-import { DAY, LOC_NAME, PRODUCT, PRODUCTS, RETAILER, STATUS_TONE, VENDOR_BY_ID, balOf, fd, fdt, h, money, orderValue, paidOf, type Invoice, type Order } from "../data";
+import { DAY, LOC_NAME, PRODUCT, PRODUCTS, RETAILER, STATUS_TONE, VENDOR_BY_ID, balOf, fd, fdt, h, money, orderValue, paidOf, isBulk, fmtQty, type Invoice, type Order } from "../data";
 import { VENDOR_LICENSE, LOC_LICENSE } from "../integrations";
 
 const termDays = (vendorId: string) => Number(VENDOR_BY_ID[vendorId].terms.replace(/\D/g, "")) || 14;
@@ -26,7 +26,8 @@ function linesFor(d: Doc): { lines: Line[]; archived: boolean } {
   const lines: Line[] = [];
   picks.forEach((p, i) => {
     const share = i === picks.length - 1 ? 1 : 1 / (picks.length - i);
-    const qty = Math.max(1, Math.floor((left * share) / p.cost));
+    const step = p.bulk ? 28 : 1; // bulk flower is billed by weight, in whole ounces here
+    const qty = Math.max(step, Math.floor((left * share) / p.cost / step) * step);
     if (qty * p.cost > left) return;
     left -= qty * p.cost;
     lines.push({ sku: p.sku, name: p.name, ordered: qty, received: qty, damaged: 0, billed: qty, unitCost: p.cost });
@@ -95,7 +96,7 @@ export function InvoicesView(props: { invoices: Invoice[]; orders: Order[]; now:
               ...(doc.inv?.qboBillId ? [{ label: "QuickBooks bill", value: doc.inv.qboBillId }] : []),
             ]} />
             <Table columns={["SKU", "Product", "Ordered", "Received", "Damaged", "Billed qty", "Unit cost", "Line total"]} align={["start", "start", "end", "end", "end", "end", "end", "end"]}
-              rows={[...lines.map((l) => [l.sku, l.name, String(l.ordered), doc.kind === "Pro forma" ? "—" : String(l.received), doc.kind === "Pro forma" ? "—" : l.damaged ? { text: String(l.damaged), tone: "danger" as const } : "0", String(l.billed), money(l.unitCost), money(l.billed * l.unitCost)]),
+              rows={[...lines.map((l) => [l.sku, isBulk(l.sku) ? `${l.name} · bulk flower (g)` : l.name, fmtQty(l.sku, l.ordered), doc.kind === "Pro forma" ? "—" : fmtQty(l.sku, l.received), doc.kind === "Pro forma" ? "—" : l.damaged ? { text: fmtQty(l.sku, l.damaged), tone: "danger" as const } : "0", fmtQty(l.sku, l.billed), `${money(l.unitCost)}${isBulk(l.sku) ? "/g" : ""}`, money(l.billed * l.unitCost)]),
                 ["", <span key="t" style={strong}>Total</span>, "", "", "", "", "", <span key="v" style={strong}>{money(doc.kind === "Pro forma" ? sub : doc.amount)}</span>]]} />
             {doc.inv ? (
               <>

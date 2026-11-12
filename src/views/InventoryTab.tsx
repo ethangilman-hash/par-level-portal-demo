@@ -2,7 +2,7 @@
 // dense checkbox table and a pagination footer. Quantities come from the Dutchie adapter; velocity is sample sales data.
 import { useEffect, useMemo, useRef, useState, useTableControls, type CSSProperties, type ReactNode } from "../kit";
 import { useStyles, SyncLine } from "../ui";
-import { ITEM, LOCS, LOC_NAME, VENDOR_BY_ID, VENDOR_BY_NAME, BASE, h, money } from "../data";
+import { ITEM, LOCS, LOC_NAME, VENDOR_BY_ID, VENDOR_BY_NAME, BASE, h, money, weightLabel } from "../data";
 import { MENU_BY_KEY, MENU_CATEGORIES, OPTION_OWNER, STRAIN_FILTERS, bulkPar, lastSoldAt, optionPar, weeklyUnits, type MenuCategory, type MenuProduct } from "../catalog/menu";
 import type { DutchieInventoryItem } from "../integrations";
 import type { RefObject } from "react";
@@ -11,7 +11,7 @@ type StockStatus = "In stock" | "Low stock" | "Out of stock";
 const STATUSES: StockStatus[] = ["In stock", "Low stock", "Out of stock"];
 const ROOMS = ["Sales Floor", "Backstock", "Vault"] as const;
 type Room = (typeof ROOMS)[number];
-const TAGS = ["Par-tracked vendor", "Below par", "Top seller", "Bulk", "Slow mover"] as const;
+const TAGS = ["Par-tracked vendor", "Below par", "Top seller", "Bulk flower", "Packaged", "Slow mover"] as const;
 type Tag = (typeof TAGS)[number];
 /** Invented parody distributors, used only if a brand has no vendor account of its own. */
 const DISTROS = ["Cascade Canna Supply", "Rogue Valley Distro", "Willamette Wholesale", "Self-distributed"];
@@ -21,10 +21,10 @@ interface InvRow {
   loc: string; room: Room; available: number; grams: boolean; price: number; cost: number;
   velocity: number; pop: number; locIdx: number; lastSold: number | null; status: StockStatus; tags: Tag[]; catIdx: number;
 }
-type SortKey = "default" | "sku" | "product" | "brand" | "location" | "available" | "price" | "cost" | "velocity" | "lastSold";
+type SortKey = "default" | "sku" | "product" | "type" | "brand" | "location" | "available" | "price" | "cost" | "velocity" | "lastSold";
 type ColKey = Exclude<SortKey, "default">;
 /** Default column order; retailers can drag headers to rearrange (kept per browser session). */
-const INV_COLS: readonly ColKey[] = ["sku", "product", "brand", "location", "available", "price", "cost", "velocity", "lastSold"];
+const INV_COLS: readonly ColKey[] = ["sku", "product", "type", "brand", "location", "available", "price", "cost", "velocity", "lastSold"];
 const DESC_FIRST: readonly string[] = ["velocity", "lastSold", "available", "price", "cost"];
 
 /** Dutchie-style 6-character SKU for items without a vendor SKU. */
@@ -41,7 +41,8 @@ function buildRows(items: Record<string, DutchieInventoryItem[]>, now: number): 
       if (!p) continue;
       const grams = it.quantityUnits === "Grams";
       const weekly = weeklyUnits(p.key, l.id);
-      const velocity = grams ? weekly * 3.5 : weekly * (own ? own.option.share : 1);
+      // Bulk flower sales are already in grams (one row per strain); packaged goods split by size option.
+      const velocity = grams ? weekly : weekly * (own ? own.option.share : 1);
       const par = grams ? bulkPar(l.id, p.key) : optionPar(l.id, it.productId);
       const qty = it.quantityAvailable;
       const status: StockStatus = qty <= 0 ? "Out of stock" : qty < par.min ? "Low stock" : "In stock";
@@ -49,9 +50,9 @@ function buildRows(items: Record<string, DutchieInventoryItem[]>, now: number): 
       const tags: Tag[] = [];
       if (p.vendorId) tags.push("Par-tracked vendor");
       if (status !== "In stock") tags.push("Below par");
-      if (grams) tags.push("Bulk");
-      if (velocity >= 6) tags.push("Top seller");
-      if (velocity < 1) tags.push("Slow mover");
+      tags.push(grams ? "Bulk flower" : "Packaged");
+      if (grams ? velocity >= 100 : velocity >= 6) tags.push("Top seller");
+      if (grams ? velocity < 14 : velocity < 1) tags.push("Slow mover");
       // Cost keeps the product's wholesale margin at every size (per gram for bulk flower).
       const costRatio = p.unitCost / (ITEM[p.key]?.price || it.unitPrice || 1);
       const cost = Math.round(it.unitPrice * costRatio * 100) / 100;
@@ -61,7 +62,8 @@ function buildRows(items: Record<string, DutchieInventoryItem[]>, now: number): 
         size: it.size, p, brand: p.brand, vendor, loc: l.id, grams, price: it.unitPrice, cost,
         velocity, pop: LOCS.reduce((a, x) => a + weeklyUnits(p.key, x.id), 0), locIdx: LOCS.findIndex((x) => x.id === l.id), lastSold, status, tags, catIdx: MENU_CATEGORIES.indexOf(p.category),
       };
-      if (grams) { out.push({ ...base, id: `${it.inventoryId}|Vault`, room: "Vault", available: qty }); continue; }
+      // Bulk flower: ONE row per strain per store, the jar total by weight (weighed out at the counter).
+      if (grams) { out.push({ ...base, id: `${it.inventoryId}|jar`, room: "Sales Floor", available: qty }); continue; }
       // Larger counts are split between the sales floor and backstock, the way Dutchie tracks rooms.
       if (qty >= 8 && h(it.productId + l.id + "room") < 0.4) {
         const back = Math.round(qty * (0.3 + 0.3 * h(it.productId + l.id + "split")));
@@ -186,6 +188,7 @@ export function InventoryTab(props: {
       switch (sort.key) {
         case "sku": return d * a.sku.localeCompare(b.sku);
         case "product": return d * a.product.localeCompare(b.product);
+        case "type": return d * ((a.grams ? 0 : 1) - (b.grams ? 0 : 1) || a.size.localeCompare(b.size));
         case "brand": return d * (a.brand.localeCompare(b.brand) || a.product.localeCompare(b.product));
         case "location": return d * (`${LOC_NAME[a.loc]}${a.room}`.localeCompare(`${LOC_NAME[b.loc]}${b.room}`));
         case "available": return d * (a.available - b.available);
@@ -219,9 +222,9 @@ export function InventoryTab(props: {
   const filtersOn = statusF.length + vendorF.length + roomF.length + catF.length + tagF.length + strainF.length + (hideZero ? 1 : 0) + (needle ? 1 : 0);
 
   const exportCsv = (rows: InvRow[]) => {
-    const head = ["SKU", "Product", "Brand", "Vendor", "Store", "Location", "Available", "Unit", "Price", "Cost", "Sales velocity (units/wk)", "Last date sold"];
+    const head = ["SKU", "Product", "Type", "Brand", "Vendor", "Store", "Location", "Available", "Unit", "Price", "Cost", "Sales velocity (per wk)", "Last date sold"];
     const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
-    const body = rows.map((r) => [r.sku, r.product, r.brand, r.vendor, LOC_NAME[r.loc], r.room, String(r.available), r.grams ? "g" : "units", r.price.toFixed(2), r.cost.toFixed(2),
+    const body = rows.map((r) => [r.sku, r.product, r.grams ? "Bulk flower (by weight)" : `Packaged (${r.size || "each"})`, r.brand, r.vendor, LOC_NAME[r.loc], r.room, String(r.available), r.grams ? "g" : "units", r.price.toFixed(2), r.cost.toFixed(2),
       fmtVel(r.velocity) + (r.grams ? " g" : ""), r.lastSold ? dateFmt.format(r.lastSold) : "Never"].map(esc).join(","));
     const blob = new Blob([[head.join(","), ...body].join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
@@ -261,14 +264,22 @@ export function InventoryTab(props: {
         {r.room}
         {store === "all" ? <div style={{ fontSize: 11, lineHeight: "15px", color: t.text.secondary }}>{LOC_NAME[r.loc]}</div> : null}
       </td>) },
-    available: { label: "Available", right: true, title: "On hand in this room (units, or grams for bulk flower)", cell: (r) => (
+    type: { label: "Type / Unit", title: "Bulk flower is one jar per strain, tracked by weight (grams). Packaged goods are tracked per SKU and size.", cell: (r) => (
+      <td key="type" style={{ ...td, whiteSpace: "nowrap" }} data-testid={r.grams ? "type-bulk" : "type-packaged"}>
+        <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 999, fontSize: 11, lineHeight: "16px", fontWeight: t.weight.semibold,
+          background: r.grams ? (light ? "#ecfdf5" : "#0f2a22") : (light ? "#eef2ff" : "#181a3a"), color: r.grams ? (light ? "#047857" : "#6ee7b7") : (light ? "#4338ca" : "#a5b4fc"),
+          border: `1px solid ${r.grams ? "#10b98155" : "#6366f155"}` }}>{r.grams ? "Bulk flower" : "Packaged"}</span>
+        <div style={{ fontSize: 11, lineHeight: "15px", color: t.text.secondary }}>{r.grams ? "by weight (g)" : `per unit · ${r.size || "each"}`}</div>
+      </td>) },
+    available: { label: "Available", right: true, title: "On hand: units for packaged goods; total weight in grams for a bulk flower strain", cell: (r) => (
       <td key="available" style={{ ...num, color: statusColor(r.status), fontWeight: r.status === "In stock" ? t.weight.regular : t.weight.semibold }} title={r.status}>
         {r.grams ? `${r.available.toLocaleString(undefined, { maximumFractionDigits: 1 })} g` : r.available.toLocaleString()}
+        {r.grams && r.available >= 14 ? <div style={{ fontSize: 11, lineHeight: "15px", color: t.text.secondary, fontWeight: t.weight.regular }}>{weightLabel(r.available)}</div> : null}
       </td>) },
     price: { label: "Price", right: true, cell: (r) => <td key="price" style={num}>{money(r.price)}{r.grams ? <span style={{ color: t.text.secondary }}> /g</span> : null}</td> },
     cost: { label: "Cost", right: true, cell: (r) => <td key="cost" style={num}>{money(r.cost)}{r.grams ? <span style={{ color: t.text.secondary }}> /g</span> : null}</td> },
-    velocity: { label: "Sales velocity (units/wk)", right: true, title: "Average units sold per week over the last 4 weeks at this store (grams/week for bulk flower)",
-      cell: (r) => <td key="velocity" style={num}>{fmtVel(r.velocity)}{r.grams ? <span style={{ color: t.text.secondary }}> g</span> : null}</td> },
+    velocity: { label: "Sales velocity (/wk)", right: true, title: "Average sold per week over the last 4 weeks at this store: units for packaged goods, grams for bulk flower",
+      cell: (r) => <td key="velocity" style={num}>{fmtVel(r.velocity)}<span style={{ color: t.text.secondary }}>{r.grams ? " g" : " u"}</span></td> },
     lastSold: { label: "Last date sold", right: true, cell: (r) => <td key="lastSold" style={{ ...num, color: r.lastSold ? t.text.primary : t.text.tertiary }}>{r.lastSold ? dateFmt.format(r.lastSold) : "Never"}</td> },
   };
   // Plain render function (not a component) so header cells keep their identity while a drag is in progress.
@@ -346,7 +357,7 @@ export function InventoryTab(props: {
           <span>{shown.length.toLocaleString()} of {scoped.length.toLocaleString()} rows · {store === "all" ? "all stores" : LOC_NAME[store]}</span>
           <span style={{ color: t.text.warning }}>{low} low stock</span>
           <span style={{ color: t.text.danger }}>{out} out of stock</span>
-          <span>Status is against par · Sales velocity = last 4-week average · Sample data</span>
+          <span>Status is against par · Sales velocity = last 4-week average · Bulk flower = one row per strain, total weight in grams · Sample data</span>
           {filtersOn ? <button type="button" onClick={() => { setQ(""); setStatusF([]); setVendorF([]); setRoomF([]); setCatF([]); setTagF([]); setStrainF([]); setHideZero(false); }}
             style={{ all: "unset", cursor: "pointer", color: link, fontWeight: t.weight.semibold }}>Clear filters</button> : null}
           <span title="Click a column header to sort (click again to flip). Drag a header to rearrange columns.">Click a header to sort · drag to rearrange</span>
@@ -369,7 +380,7 @@ export function InventoryTab(props: {
             </thead>
             <tbody>
               {slice.length === 0 ? (
-                <tr><td colSpan={10} style={{ ...td, textAlign: "center", color: t.text.secondary, padding: 24 }}>No inventory matches these filters.</td></tr>
+                <tr><td colSpan={11} style={{ ...td, textAlign: "center", color: t.text.secondary, padding: 24 }}>No inventory matches these filters.</td></tr>
               ) : slice.map((r) => {
                 const on = sel.has(r.id);
                 return (

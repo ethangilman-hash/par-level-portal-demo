@@ -55,7 +55,7 @@ export function createMockDutchie(inv: InvMap): DutchieAdapter {
           if (p.bulk) {
             const k = `${locationId}|${p.key}`;
             items.push({ inventoryId: `${p.key}-bulk-${locationId}`, productId: p.key, sku: p.key, productName: p.name, brandName: p.brand, category: p.sub, masterCategory: p.category,
-              strainType: p.strain, size: "bulk", quantityAvailable: stock.grams[locationId][p.key], quantityUnits: "Grams", unitPrice: p.options[0].price, unitCost: r2(p.unitCost / 3.5),
+              strainType: p.strain, size: "bulk", quantityAvailable: stock.grams[locationId][p.key], quantityUnits: "Grams", unitPrice: p.options[0].price, unitCost: r2(p.unitCost),
               vendorId: p.vendorId, vendor, packageId: null, lastModifiedDateUtc: ts(k) });
             continue;
           }
@@ -74,13 +74,14 @@ export function createMockDutchie(inv: InvMap): DutchieAdapter {
       { provider: "dutchie", direction: "push", operation: "receiveInventory", endpoint: "POST /inventory/receiveinventory", ref: req.orderTitle },
       () => {
         for (const it of req.items) {
-          const u = stock.units[req.locationId];
-          u[it.productId] = (u[it.productId] ?? 0) + it.quantity;
+          // Bulk flower is received by weight into the strain's jar total.
+          const u = MENU_BY_KEY[it.productId]?.bulk ? stock.grams[req.locationId] : stock.units[req.locationId];
+          u[it.productId] = Math.round(((u[it.productId] ?? 0) + it.quantity) * 10) / 10;
           modified[`${req.locationId}|${it.productId}`] = Date.now();
         }
         return { receiveId: `RCV-${receiveSeq++}`, itemsReceived: req.items.reduce((s, i) => s + i.quantity, 0) };
       },
-      (r) => `${r.itemsReceived} units received into ${LOC_NAME[req.locationId]} (${r.receiveId})`,
+      (r) => `${r.itemsReceived} units/grams received into ${LOC_NAME[req.locationId]} (${r.receiveId})`,
     ),
     getSales: (locationId, weeks) => mockCall(
       { provider: "dutchie", direction: "pull", operation: "getSales", endpoint: "GET /reporting/transactions", ref: locationId === "all" ? "All locations" : LOC_NAME[locationId] },

@@ -6,6 +6,7 @@ import type { ReactNode, CSSProperties, TableCell } from "./kit";
 
 import {
   MENU_SKUS, COMPETITOR_SKUS, StatusToneT, Vendor, VENDORS, ALL_VENDORS, VENDOR_BY_ID, RETAILER, Loc, LOCS, LOC_NAME, LOC_FACTOR, WEEKS, CAT_BASE, CASE_PACK, CARRIERS, SLA_HOURS, MIN, HOUR, DAY, BASE, h, money, money0, dFmt, dtFmt, fd, fdt, toInt, ageLabel, Product, PRODUCTS, PRODUCT, Item, ITEMS, ITEM, buildSales, SALES, salesAt, last4, perDay, ParLevel, PARS, parOf, Stock, InvMap, seedInventory, OrderStatus, OrderLine, Note, Order, Invoice, LogEntry, STATUS_TONE, OPEN, ln, lineSum, orderValue, seedOrders, seedInvoices, paidOf, balOf, seedLog, onOrderQty, stockStatus, catRanks, rank4, Suggestion, SuggestOpts, suggest,
+  isBulk, fmtQty, fmtQtyShort, fmtGrams, qtyUnit, typeLabel, BULK_STEP,
 } from "./data";
 import { useStyles, Card, Bar, SyncLine } from "./ui";
 import { integrations, withExternalIds, leaflinkNumberFor, LL_STATUS, VENDOR_LICENSE, LOC_LICENSE, QBO_COMPANY, isoDate, type DutchieInventoryItem } from "./integrations";
@@ -26,6 +27,16 @@ import {
   FREQ_DAYS, accKey, lastDelivery, openEta, schedule, seedLocationContacts, seedRetailerNotes, seedRetailerPrefs, seedVendorContacts, seedVendorNotes, seedVendorPrefs,
   type AccountNote, type AccountPrefs, type Contact,
 } from "./accounts";
+
+/** Number input with its unit ("g" for bulk flower, "units" for packaged). */
+function QtyInput(props: { sku: string; value: string; onChange: (v: string) => void }) {
+  const { small } = useStyles();
+  return <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Input type="number" value={props.value} onChange={props.onChange} /><span style={small}>{isBulk(props.sku) ? "g" : "u"}</span></span>;
+}
+/** Unit cost / price with "/g" for bulk flower. */
+const perU = (sku: string, n: number) => `${money(n)}${isBulk(sku) ? "/g" : ""}`;
+/** Product name with a Bulk flower marker. */
+const pname = (sku: string) => (isBulk(sku) ? `${PRODUCT[sku].name} · bulk flower (g)` : PRODUCT[sku].name);
 
 interface TLStep { label: string; at?: number; state: "done" | "current" | "todo" | "bad"; meta?: string }
 function Timeline(props: { order: Order }) {
@@ -116,14 +127,14 @@ function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: numb
   let columns: string[];
   let rows: TableCell[][];
   if (retailerEditing) {
-    columns = ["SKU", "Product", "Q.O.H.", "Min / Max", "Units/day", "Requested", "Approve qty", "Line total"];
+    columns = ["SKU", "Product", "Q.O.H.", "Min / Max", "Sold/day", "Requested", "Approve qty", "Line total"];
     rows = o.lines.map((l) => {
       const p = PRODUCT[l.sku];
       const par = parOf(o.locId, l.sku);
       const q = inv[`${o.locId}|${l.sku}`].qoh;
       return [
-        l.sku, p.name, String(q), `${par.min} / ${par.max}`, perDay(l.sku, o.locId).toFixed(1), String(l.requested),
-        <Input key="q" type="number" value={qty[l.sku] ?? ""} onChange={(val) => setQty({ ...qty, [l.sku]: val })} />,
+        l.sku, pname(l.sku), fmtQty(l.sku, q), `${fmtQtyShort(l.sku, par.min)} / ${fmtQtyShort(l.sku, par.max)}`, `${perDay(l.sku, o.locId).toFixed(1)}${p.bulk ? " g" : ""}`, fmtQty(l.sku, l.requested),
+        <QtyInput key="q" sku={l.sku} value={qty[l.sku] ?? ""} onChange={(val) => setQty({ ...qty, [l.sku]: val })} />,
         money(qtyMap[l.sku] * l.unitCost),
       ];
     });
@@ -133,10 +144,10 @@ function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: numb
       const e = rec[l.sku];
       const acc = Math.max(0, toInt(e.r) - toInt(e.d));
       return [
-        l.sku, PRODUCT[l.sku].name, String(l.approved),
-        <Input key="r" type="number" value={e.r} onChange={(val) => setRec({ ...rec, [l.sku]: { ...e, r: val } })} />,
-        <Input key="d" type="number" value={e.d} onChange={(val) => setRec({ ...rec, [l.sku]: { ...e, d: val } })} />,
-        acc === l.approved ? String(acc) : { text: String(acc), tone: "warning" },
+        l.sku, pname(l.sku), fmtQty(l.sku, l.approved),
+        <QtyInput key="r" sku={l.sku} value={e.r} onChange={(val) => setRec({ ...rec, [l.sku]: { ...e, r: val } })} />,
+        <QtyInput key="d" sku={l.sku} value={e.d} onChange={(val) => setRec({ ...rec, [l.sku]: { ...e, d: val } })} />,
+        acc === l.approved ? fmtQty(l.sku, acc) : { text: fmtQty(l.sku, acc), tone: "warning" },
         money(acc * l.unitCost),
       ];
     });
@@ -146,11 +157,11 @@ function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: numb
       const accepted = Math.max(0, l.received - l.damaged);
       const base = o.status === "Received" ? accepted : o.status === "Pending" ? l.requested : l.approved;
       return [
-        l.sku, PRODUCT[l.sku].name, String(l.requested),
-        o.status === "Pending" || o.status === "Rejected" ? "—" : l.approved !== l.requested ? { text: String(l.approved), tone: "warning" } : String(l.approved),
-        o.status === "Received" ? String(l.received) : "—",
-        o.status === "Received" ? (l.damaged > 0 ? { text: String(l.damaged), tone: "danger" } : "0") : "—",
-        money(l.unitCost), money(base * l.unitCost),
+        l.sku, pname(l.sku), fmtQty(l.sku, l.requested),
+        o.status === "Pending" || o.status === "Rejected" ? "—" : l.approved !== l.requested ? { text: fmtQty(l.sku, l.approved), tone: "warning" } : fmtQty(l.sku, l.approved),
+        o.status === "Received" ? fmtQty(l.sku, l.received) : "—",
+        o.status === "Received" ? (l.damaged > 0 ? { text: fmtQty(l.sku, l.damaged), tone: "danger" } : "0") : "—",
+        perU(l.sku, l.unitCost), money(base * l.unitCost),
       ];
     });
   }
@@ -233,7 +244,7 @@ function OrderCard(props: { order: Order; role: "vendor" | "retailer"; now: numb
           <>
             <Button variant="primary" label="Mark received"
               onClick={() => act.receive(o.id, Object.fromEntries(o.lines.map((l) => [l.sku, { received: toInt(rec[l.sku].r), damaged: toInt(rec[l.sku].d) }])), note.trim())} />
-            <span style={small}>Accepted units (received − damaged) are added to Q.O.H. and an invoice is generated.</span>
+            <span style={small}>Accepted quantity (received − damaged; grams for bulk flower) is added to Q.O.H. and an invoice is generated.</span>
           </>
         ) : null}
         {role === "vendor" && o.status === "Pending" ? <span style={small}>Waiting for {RETAILER} to review.</span> : null}
@@ -268,8 +279,9 @@ function VendorDashboard(props: Ctx & { goOrder: () => void }) {
   const stockouts = stats.filter((s) => s.cover < vendor.leadDays);
   const openVal = orders.filter((o) => o.vendorId === vendor.id && OPEN.includes(o.status)).reduce((s, o) => s + orderValue(o), 0);
   const rec = orders.filter((o) => o.vendorId === vendor.id && o.status === "Received");
-  const appr = rec.reduce((s, o) => s + o.lines.reduce((a, l) => a + l.approved, 0), 0);
-  const acc = rec.reduce((s, o) => s + o.lines.reduce((a, l) => a + Math.max(0, l.received - l.damaged), 0), 0);
+  // By value, so grams of bulk flower and packaged units can be combined.
+  const appr = rec.reduce((s, o) => s + o.lines.reduce((a, l) => a + l.approved * l.unitCost, 0), 0);
+  const acc = rec.reduce((s, o) => s + o.lines.reduce((a, l) => a + Math.max(0, l.received - l.damaged) * l.unitCost, 0), 0);
   const fill = appr > 0 ? (acc / appr) * 100 : 100;
   const sel = stats.find((s) => s.p.sku === pick) ?? stats[0];
   const hist = SALES[sel.p.sku];
@@ -283,10 +295,10 @@ function VendorDashboard(props: Ctx & { goOrder: () => void }) {
   return (
     <>
       <Metrics metrics={[
-        { value: String(below.length), label: "SKUs below Min", detail: `of ${skus.length} at ${LOC_NAME[loc]}`, tone: below.length ? "danger" : "success" },
+        { value: String(below.length), label: "Items below Min", detail: `of ${skus.length} at ${LOC_NAME[loc]} (a bulk flower strain counts once)`, tone: below.length ? "danger" : "success" },
         { value: String(stockouts.length), label: "Projected stockouts", detail: `cover < ${vendor.leadDays}-day lead time`, tone: stockouts.length ? "warning" : "success" },
         { value: money0(openVal), label: "Open order value", detail: "pending, approved and in transit" },
-        { value: `${fill.toFixed(1)}%`, label: "Fill rate", detail: "accepted ÷ approved units, received orders", tone: fill >= 97 ? "success" : "warning" },
+        { value: `${fill.toFixed(1)}%`, label: "Fill rate", detail: "accepted ÷ approved (by value), received orders", tone: fill >= 97 ? "success" : "warning" },
       ]} />
       {below.length > 0 ? (
         <Callout tone="info" lead={`${below.length} SKU${below.length > 1 ? "s are" : " is"} below Min at ${LOC_NAME[loc]}.`}>
@@ -295,19 +307,20 @@ function VendorDashboard(props: Ctx & { goOrder: () => void }) {
       ) : null}
       <div style={row}><Button variant="primary" label="Build suggested order" onClick={props.goOrder} /></div>
       <Grid columns={2}>
-        <Section heading="Sell-through" caption={`Units per week at ${LOC_NAME[loc]} vs other locations · sample history`}
+        <Section heading="Sell-through" caption={`${sel.p.bulk ? "Grams" : "Units"} per week at ${LOC_NAME[loc]} vs other locations · sample history`}
           actions={<Select options={skus.map((p) => ({ value: p.sku, label: shortName(p.name) }))} value={pick} onChange={setPick} />}>
           <LineChart points={WEEKS.map((w, i) => ({ label: w, value: hist[loc][i] }))} ceiling={Math.ceil(ceiling)}
             labels={[LOC_NAME[loc]]} lines={other.map((l) => ({ label: l.name, values: hist[l.id] }))} />
           <Properties items={[
-            { label: "Velocity", value: `${sel.v.toFixed(1)} units/day (last 4 weeks)` },
-            { label: "Q.O.H. / Min / Max", value: `${sel.q} / ${sel.par.min} / ${sel.par.max}` },
+            { label: "Type", value: typeLabel(sel.p.sku) },
+            { label: "Velocity", value: `${sel.v.toFixed(1)} ${sel.p.bulk ? "g" : "units"}/day (last 4 weeks)` },
+            { label: "Q.O.H. / Min / Max", value: `${fmtQty(sel.p.sku, sel.q)} / ${fmtQtyShort(sel.p.sku, sel.par.min)} / ${fmtQtyShort(sel.p.sku, sel.par.max)}` },
             { label: "Days of cover", value: <Status tone={sel.cover < vendor.leadDays ? "danger" : sel.cover < vendor.leadDays + 4 ? "warning" : "success"}>{sel.cover >= 99 ? "—" : `${sel.cover.toFixed(1)} days`}</Status> },
-            { label: "Category rank", value: `#${myRank} of ${ranks.length} in ${sel.p.category} (units)` },
+            { label: "Category rank", value: `#${myRank} of ${ranks.length} in ${sel.p.category} (${sel.p.bulk ? "grams" : "units"})` },
           ]} />
         </Section>
-        <Section heading="Days of cover, lowest first" caption={`Q.O.H. ÷ units/day · lead time ${vendor.leadDays} days`}>
-          <Bars bars={coverBars.map((s) => ({ label: shortName(s.p.name), value: Math.min(s.cover, 60), display: s.cover >= 99 ? "—" : `${s.cover.toFixed(1)}d`, meta: `${s.q} on hand` }))} emphasis="none" />
+        <Section heading="Days of cover, lowest first" caption={`Q.O.H. ÷ sold per day (grams for bulk flower) · lead time ${vendor.leadDays} days`}>
+          <Bars bars={coverBars.map((s) => ({ label: shortName(s.p.name), value: Math.min(s.cover, 60), display: s.cover >= 99 ? "—" : `${s.cover.toFixed(1)}d`, meta: `${fmtQtyShort(s.p.sku, s.q)} on hand` }))} emphasis="none" />
         </Section>
       </Grid>
       <Section heading="Stock vs Max across locations" caption="Each cell is Q.O.H. as % of Max; gray means out of stock. Sample data.">
@@ -334,15 +347,15 @@ function QohTab(props: Ctx) {
         { value: money(shelf), label: "Shelf value", detail: "at out-the-door price" },
         { value: money(invBal), label: "Balance due", detail: vendor.terms },
       ]} />
-      <Section heading={`Quantity on hand · ${LOC_NAME[loc]}`} caption="Shelf prices adapted from a public menu; costs and quantities are sample data.">
+      <Section heading={`Quantity on hand · ${LOC_NAME[loc]}`} caption="Bulk flower is one jar per strain, counted by total weight (cost and price per gram); packaged goods are counted per unit. Shelf prices adapted from a public menu; costs and quantities are sample data.">
         <Table
-          columns={["Product Name", "Product Type", "Description", "Q.O.H.", "Avg Cost per Unit", "Out the Door", "Value", "Vendor", "Brand", "Received", "Status"]}
-          align={["start", "start", "start", "end", "end", "end", "end", "start", "start", "start", "start"]}
+          columns={["Product Name", "Product Type", "Type / Unit", "Description", "Q.O.H.", "Avg Cost per Unit", "Out the Door", "Value", "Vendor", "Brand", "Received", "Status"]}
+          align={["start", "start", "start", "start", "end", "end", "end", "end", "start", "start", "start", "start"]}
           rows={skus.map((p) => {
             const s = inv[`${loc}|${p.sku}`];
             const st = stockStatus(s.qoh, parOf(loc, p.sku));
             return [
-              `${p.name}${p.strain !== "N/A" ? ` (${p.strain})` : ""}`, p.category.toLowerCase(), p.group, String(s.qoh), money(p.cost), money(p.price),
+              `${p.name}${p.strain !== "N/A" ? ` (${p.strain})` : ""}`, p.category.toLowerCase(), p.bulk ? { text: "Bulk flower · by weight (g)", tone: "success" } : `Packaged · ${p.size}`, p.group, fmtQty(p.sku, s.qoh), perU(p.sku, p.cost), perU(p.sku, p.price),
               money(s.qoh * p.cost), vendor.name, p.brand, fd(s.received), <Status key="s" tone={st.tone}>{st.label}</Status>,
             ];
           })}
@@ -361,7 +374,7 @@ function ParTab(props: Ctx) {
   const openSkus = skus.filter((p) => p.group === open);
   return (
     <>
-      <Section heading={`Par levels · ${LOC_NAME[loc]}`} caption="Min and Max apply to each product in the description; Max Strains caps how many products of it the store carries. Set by the retailer; sample data.">
+      <Section heading={`Par levels · ${LOC_NAME[loc]}`} caption="Min and Max apply to each product in the description (grams per strain for bulk flower, units for packaged goods); Max Strains caps how many products of it the store carries. Set by the retailer; sample data.">
         <Table columns={["Description", "Min", "Max", "Max Strains", "Strains stocked", "Below Min", ""]}
           align={["start", "end", "end", "end", "end", "end", "end"]}
           rows={groups.map((g) => {
@@ -369,7 +382,8 @@ function ParTab(props: Ctx) {
             const ps = skus.filter((p) => p.group === g);
             const stocked = ps.filter((p) => inv[`${loc}|${p.sku}`].qoh > 0).length;
             const below = ps.filter((p) => inv[`${loc}|${p.sku}`].qoh < par.min).length;
-            return [`${vendor.name} ${g}`, String(par.min), String(par.max), String(par.maxStrains), String(stocked),
+            const k = ps[0].sku;
+            return [`${vendor.name} ${g}`, fmtQty(k, par.min), fmtQty(k, par.max), String(par.maxStrains), String(stocked),
               below ? { text: String(below), tone: "danger" } : "0",
               <Button key="v" variant="quiet" label={open === g ? "Hide products" : "View Products"} onClick={() => setOpen(open === g ? "" : g)} />];
           })} />
@@ -382,7 +396,7 @@ function ParTab(props: Ctx) {
               const par = parOf(loc, p.sku);
               const q = inv[`${loc}|${p.sku}`].qoh;
               const st = stockStatus(q, par);
-              return [p.sku, p.name, p.strain, p.thc || "—", String(q), `${par.min} / ${par.max}`, <Status key="s" tone={st.tone}>{st.label}</Status>];
+              return [p.sku, pname(p.sku), p.strain, p.thc || "—", fmtQty(p.sku, q), `${fmtQtyShort(p.sku, par.min)} / ${fmtQtyShort(p.sku, par.max)}`, <Status key="s" tone={st.tone}>{st.label}</Status>];
             })} />
         </Section>
       ) : null}
@@ -413,11 +427,11 @@ function InsightsTab(props: Ctx) {
     <>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
         <Segmented options={cats} value={c} onChange={setCat} />
-        <Segmented options={[{ value: "units", label: "Units" }, { value: "revenue", label: "Revenue" }]} value={by} onChange={(v) => setBy(v === "revenue" ? "revenue" : "units")} />
+        <Segmented options={[{ value: "units", label: c === "Flower" ? "Grams" : "Units" }, { value: "revenue", label: "Revenue" }]} value={by} onChange={(v) => setBy(v === "revenue" ? "revenue" : "units")} />
         <Select options={[{ value: "all", label: "All locations" }, ...LOCS.map((l) => ({ value: l.id, label: l.name }))]} value={scope} onChange={setScope} />
       </div>
       <Section heading={`${c} rankings · ${scope === "all" ? "all locations" : LOC_NAME[scope]}`} caption="Weekly average over the last 4 weeks. Your SKUs are marked. Brands are parody names; sales are sample data.">
-        <Table columns={["Rank", "Product", "Brand", "Size", "Shelf price", "Units/wk", "Revenue/wk", "Share"]}
+        <Table columns={["Rank", "Product", "Brand", c === "Flower" ? "Type" : "Size", c === "Flower" ? "Shelf price /g" : "Shelf price", c === "Flower" ? "Grams/wk" : "Units/wk", "Revenue/wk", "Share"]}
           align={["end", "start", "start", "start", "end", "end", "end", "end"]}
           emphasis={0}
           rows={ranked.slice(0, 12).map((r, i) => {
@@ -425,19 +439,19 @@ function InsightsTab(props: Ctx) {
             const own = it.vendorId === vendor.id;
             return [
               `#${i + 1}`, own ? { text: `${it.name} · yours`, tone: "success" } : it.name, it.brand, it.size, money(it.price),
-              r.units.toFixed(1), money0(r.revenue), `${(((by === "units" ? r.units : r.revenue) / tot) * 100).toFixed(1)}%`,
+              it.bulk ? `${r.units.toFixed(1)} g` : r.units.toFixed(1), money0(r.revenue), `${(((by === "units" ? r.units : r.revenue) / tot) * 100).toFixed(1)}%`,
             ];
           })} />
       </Section>
       <Grid columns={2}>
         <Section heading={`Brand share of ${c} ${by}`} caption="Top 8 brands, last 4 weeks">
-          <Bars bars={brands.map(([b, v]) => ({ label: b === vendor.name ? `${b} (you)` : b, value: v, display: by === "units" ? `${v.toFixed(0)}/wk` : money0(v) }))}
+          <Bars bars={brands.map(([b, v]) => ({ label: b === vendor.name ? `${b} (you)` : b, value: v, display: by === "units" ? `${v.toFixed(0)}${c === "Flower" ? " g" : ""}/wk` : money0(v) }))}
             emphasis={Math.max(0, brands.findIndex(([b]) => b === vendor.name))} />
         </Section>
         <Section heading="Price vs units sold" caption="Each dot is a SKU in the category">
           <Scatter
             points={ITEMS.filter((i) => i.category === c).map((i) => ({ x: i.price, y: Math.round(last4(salesAt(i.key, scope)) * 10) / 10, label: shortName(i.name), series: i.vendorId === vendor.id ? vendor.name : "Other brands" }))}
-            x={{ name: "Shelf price", format: (n) => `$${n}` }} y={{ name: "Units/wk" }} />
+            x={{ name: c === "Flower" ? "Shelf price per gram" : "Shelf price", format: (n) => `$${n}` }} y={{ name: c === "Flower" ? "Grams/wk" : "Units/wk" }} />
         </Section>
       </Grid>
       <Grid columns={2}>
@@ -477,7 +491,8 @@ function OrderBuilder(props: Ctx & { submit: (lines: OrderLine[], mode: string, 
   const shown = hideZero ? sugg.filter((s) => qtyOf(s) > 0 || s.suggested > 0) : sugg;
   const lines = sugg.filter((s) => qtyOf(s) > 0);
   const total = lines.reduce((a, s) => a + qtyOf(s) * s.p.cost, 0);
-  const units = lines.reduce((a, s) => a + qtyOf(s), 0);
+  const units = lines.filter((s) => !s.p.bulk).reduce((a, s) => a + qtyOf(s), 0);
+  const grams = lines.filter((s) => s.p.bulk).reduce((a, s) => a + qtyOf(s), 0);
   const caseIssues = lines.filter((s) => qtyOf(s) % s.p.casePack !== 0);
   const overMax = lines.filter((s) => s.qoh + s.onOrder + qtyOf(s) > s.par.max);
   const short = total < props.sched.prefs.minOrder;
@@ -498,7 +513,7 @@ function OrderBuilder(props: Ctx & { submit: (lines: OrderLine[], mode: string, 
               <Toggle label="Cap at Max" value={capMax} onChange={setCapMax} />
             </>
           ) : null}
-          <Toggle label="Round up to case pack" value={roundCase} onChange={setRoundCase} />
+          <Toggle label="Round up to case pack (¼ lb for bulk flower)" value={roundCase} onChange={setRoundCase} />
           <Toggle label="Hide zero lines" value={hideZero} onChange={setHideZero} />
           <Button variant="quiet" label="Reset to suggestions" onClick={() => setOver({})} />
         </div>
@@ -508,17 +523,17 @@ function OrderBuilder(props: Ctx & { submit: (lines: OrderLine[], mode: string, 
           The velocity review period defaults to the delivery interval ({FREQ_DAYS[props.sched.prefs.frequency]} days).
         </Callout>
         <Table
-          columns={["SKU", "Product", "Q.O.H.", "Min / Max", "On order", "Units/day", "Cover", "Suggested", "Order qty", "Line total", "How it's calculated"]}
+          columns={["SKU", "Product", "Q.O.H.", "Min / Max", "On order", "Sold/day", "Cover", "Suggested", "Order qty", "Line total", "How it's calculated"]}
           align={["start", "start", "end", "end", "end", "end", "end", "end", "end", "end", "start"]}
           rows={shown.map((s) => {
             const q = qtyOf(s);
             return [
-              s.p.sku, s.p.name,
-              s.qoh < s.par.min ? { text: String(s.qoh), tone: "danger" } : String(s.qoh),
-              `${s.par.min} / ${s.par.max}`, String(s.onOrder), s.vday.toFixed(1),
+              s.p.sku, pname(s.p.sku),
+              s.qoh < s.par.min ? { text: fmtQty(s.p.sku, s.qoh), tone: "danger" } : fmtQty(s.p.sku, s.qoh),
+              `${fmtQtyShort(s.p.sku, s.par.min)} / ${fmtQtyShort(s.p.sku, s.par.max)}`, fmtQtyShort(s.p.sku, s.onOrder), `${s.vday.toFixed(1)}${s.p.bulk ? " g" : ""}`,
               s.cover >= 99 ? "—" : s.cover < vendor.leadDays ? { text: `${s.cover.toFixed(1)}d`, tone: "danger" } : `${s.cover.toFixed(1)}d`,
-              String(s.suggested),
-              <Input key="q" type="number" value={over[s.p.sku] ?? String(s.suggested)} onChange={(v) => setOver({ ...over, [s.p.sku]: v })} />,
+              fmtQty(s.p.sku, s.suggested),
+              <QtyInput key="q" sku={s.p.sku} value={over[s.p.sku] ?? String(s.suggested)} onChange={(v) => setOver({ ...over, [s.p.sku]: v })} />,
               q > 0 ? money(q * s.p.cost) : "—",
               <span key="m" style={small}>{s.math}</span>,
             ];
@@ -528,10 +543,10 @@ function OrderBuilder(props: Ctx & { submit: (lines: OrderLine[], mode: string, 
       <Grid columns={2}>
         <Section heading="Order summary">
           <Properties items={[
-            { label: "Lines / units", value: `${lines.length} lines · ${units} units` },
+            { label: "Lines / quantity", value: `${lines.length} lines · ${units} units${grams ? ` + ${fmtGrams(grams)} bulk flower` : ""}` },
             { label: "Order total (cost)", value: money(total) },
             { label: "Minimum order", value: short ? <Status tone="warning">{`${money(props.sched.prefs.minOrder - total)} short of ${money0(props.sched.prefs.minOrder)}`}</Status> : <Status tone="success">Met</Status> },
-            { label: "Case packs", value: caseIssues.length ? <Status tone="warning">{`${caseIssues.length} line(s) not in full cases`}</Status> : <Status tone="success">All full cases</Status> },
+            { label: "Case packs", value: caseIssues.length ? <Status tone="warning">{`${caseIssues.length} line(s) not in full cases (bulk flower: ¼ lb / ${BULK_STEP} g steps)`}</Status> : <Status tone="success">All full cases</Status> },
             { label: "Max check", value: overMax.length ? <Status tone="warning">{`${overMax.length} line(s) would exceed Max`}</Status> : <Status tone="success">Within Max</Status> },
             { label: "Method", value: modeLabel },
           ]} />
@@ -618,16 +633,17 @@ function BelowParTable(props: { inv: InvMap; orders: Order[]; locFilter: string;
       const own = OPTION_OWNER[p.sku];
       const sold = own ? lastSoldAt(p.sku, l.id, weeklyUnits(own.product.key, l.id) * own.option.share, props.now) : null;
       const cover = v > 0 ? q / v : null;
-      rows.push([l.name, VENDOR_BY_ID[p.vendorId].name, p.sku, p.name, q === 0 ? { text: "0", tone: "danger" } : String(q),
-        `${par.min} / ${par.max}`, String(par.max - q), cover !== null ? `${cover.toFixed(1)}d` : "—",
+      rows.push([l.name, VENDOR_BY_ID[p.vendorId].name, p.sku, p.name, p.bulk ? { text: "Bulk flower · g", tone: "success" } : `Packaged · ${p.size}`,
+        q === 0 ? { text: p.bulk ? "0 g" : "0", tone: "danger" } : fmtQty(p.sku, q),
+        `${fmtQtyShort(p.sku, par.min)} / ${fmtQtyShort(p.sku, par.max)}`, fmtQty(p.sku, par.max - q), cover !== null ? `${cover.toFixed(1)}d` : "—",
         sold ? lastSoldFmt.format(sold) : { text: "Never", tone: undefined },
-        oo > 0 ? { text: `${oo} on order`, tone: "success" } : { text: "None", tone: "warning" }]);
-      keys.push([l.name, VENDOR_BY_ID[p.vendorId].name, p.sku, p.name.toLowerCase(), q, par.min, par.max - q, cover, sold, oo]);
+        oo > 0 ? { text: `${fmtQtyShort(p.sku, oo)} on order`, tone: "success" } : { text: "None", tone: "warning" }]);
+      keys.push([l.name, VENDOR_BY_ID[p.vendorId].name, p.sku, p.name.toLowerCase(), p.bulk ? "bulk" : "packaged", q, par.min, par.max - q, cover, sold, oo]);
     }
   }
   if (rows.length === 0) return <Callout tone="success">Every SKU is at or above Min.</Callout>;
-  return <Table id="retail-below-par" columns={["Location", "Vendor", "SKU", "Product", "Q.O.H.", "Min / Max", "Gap to Max", "Cover", "Date Last Sold", "Open order"]}
-    align={["start", "start", "start", "start", "end", "end", "end", "end", "end", "start"]} rows={rows} sortKeys={keys} />;
+  return <Table id="retail-below-par" columns={["Location", "Vendor", "SKU", "Product", "Type / Unit", "Q.O.H.", "Min / Max", "Gap to Max", "Cover", "Date Last Sold", "Open order"]}
+    align={["start", "start", "start", "start", "start", "end", "end", "end", "end", "end", "start"]} rows={rows} sortKeys={keys} />;
 }
 
 /** The single vendor demo account behind "Vendor log in". */
@@ -638,11 +654,11 @@ const HOW_STEPS = [
   { title: "Pick a role on the start page", detail: "Retail log in opens the store manager console; Vendor log in opens the Ironic vendor portal. No passwords; it's sample data." },
   { title: "Step 1 after log in: connect your system (simulated)", detail: "Retail: connect the Dutchie API with read-only access (inventory, sales, menu; it never writes to the POS). Vendor: connect LeafLink, Apex, Marjin and/or Distru, choosing read-only (see store inventory and send order requests) or read/write (also push the approved order through on that platform). No credentials are asked for and no real connection is made; it's optional and lasts for the browser session." },
   { title: "Vendor: choose a store location and review reports", detail: "Q.O.H., Par Levels (Min / Max / Max Strains), Category Insights, Invoice Logs and Email Settings, modeled on a typical vendor portal." },
-  { title: "Vendor: build and submit an order", detail: "Suggested quantities come from Order to Max or velocity + lead time + safety stock, rounded to case packs and checked against the minimum order." },
+  { title: "Vendor: build and submit an order", detail: "Suggested quantities come from Order to Max or velocity + lead time + safety stock, rounded to case packs (bulk flower in ¼ lb / 112 g steps) and checked against the minimum order. Bulk flower is ordered by weight; packaged goods by unit." },
   { title: "Retailer: approve, adjust, counter or reject", detail: "Switch account → Retail log in → Orders → Approvals. Edit line quantities, add notes, and watch the approval SLA age on each order." },
   { title: "Vendor: ship", detail: "Switch back to Vendor log in → Orders. Pick a carrier and ETA; a Metrc transfer manifest with package tags is created through the integrations layer (mock)." },
-  { title: "Retailer: receive", detail: "Orders → Receiving: record received and damaged units. Metrc receives the transfer, Dutchie inventory increases, and QuickBooks gets an invoice (vendor) and a bill (retailer)." },
-  { title: "Explore", detail: "Retailer: Inventory (All inventory, Below par and Performance charts), Orders (Approvals, Receiving, Order history, Invoice), Finance, Vendors (every menu brand as a vendor account) and Integrations. Vendor: Retailers accounts and Integrations. All provider calls are mocked; see the sync log." },
+  { title: "Retailer: receive", detail: "Orders → Receiving: record received and damaged units (grams for bulk flower). Metrc receives the transfer, Dutchie inventory increases, and QuickBooks gets an invoice (vendor) and a bill (retailer)." },
+  { title: "Explore", detail: "Retailer: Inventory (All inventory, Below par and Performance charts; bulk flower is one row per strain with its total weight in grams, packaged goods are one row per SKU and size), Orders (Approvals, Receiving, Order history, Invoice), Finance, Vendors (every menu brand as a vendor account) and Integrations. Vendor: Retailers accounts and Integrations. All provider calls are mocked; see the sync log." },
 ];
 
 export default function ParLevelPortal() {
@@ -803,7 +819,7 @@ export default function ParLevelPortal() {
       integrations.metrc.createTransferManifest({
         shipperLicense: VENDOR_LICENSE[o.vendorId], recipientLicense: LOC_LICENSE[o.locId], recipientName: `${RETAILER} · ${LOC_NAME[o.locId]}`, invoiceNumber: id,
         estimatedDeparture: new Date(at).toISOString(), estimatedArrival: new Date(at + etaDays * DAY).toISOString(), transporter: carrier,
-        packages: o.lines.filter((l) => l.approved > 0).map((l) => ({ sku: l.sku, itemName: PRODUCT[l.sku].name, quantity: l.approved, unitOfMeasure: "Each" as const, wholesalePrice: l.unitCost })),
+        packages: o.lines.filter((l) => l.approved > 0).map((l) => ({ sku: l.sku, itemName: PRODUCT[l.sku].name, quantity: l.approved, unitOfMeasure: isBulk(l.sku) ? "Grams" as const : "Each" as const, wholesalePrice: l.unitCost })),
       }).then((tr) => {
         upd(id, (x) => ({ ...x, manifest: tr.manifestNumber, metrcTransferId: tr.id, lines: x.lines.map((l) => ({ ...l, packageLabel: tr.packages.find((p) => p.sku === l.sku)?.label })) }));
         addLog(at, vname(id), vidOf(id), `Metrc manifest ${tr.manifestNumber} created for ${id} (${tr.packages.length} tagged packages)`);
@@ -817,9 +833,9 @@ export default function ParLevelPortal() {
       const issues: string[] = [];
       for (const l of o.lines) {
         const r = rec[l.sku];
-        if (r.received < l.approved) issues.push(`Short ${l.approved - r.received} × ${PRODUCT[l.sku].name}`);
-        if (r.received > l.approved) issues.push(`Over ${r.received - l.approved} × ${PRODUCT[l.sku].name}`);
-        if (r.damaged > 0) issues.push(`${r.damaged} × ${PRODUCT[l.sku].name} damaged`);
+        if (r.received < l.approved) issues.push(`Short ${fmtQtyShort(l.sku, l.approved - r.received)} × ${PRODUCT[l.sku].name}`);
+        if (r.received > l.approved) issues.push(`Over ${fmtQtyShort(l.sku, r.received - l.approved)} × ${PRODUCT[l.sku].name}`);
+        if (r.damaged > 0) issues.push(`${fmtQtyShort(l.sku, r.damaged)} × ${PRODUCT[l.sku].name} damaged`);
       }
       const lines = o.lines.map((l) => ({ ...l, received: rec[l.sku].received, damaged: Math.min(rec[l.sku].damaged, rec[l.sku].received) }));
       const amount = Math.round(lines.reduce((s, l) => s + Math.max(0, l.received - l.damaged) * l.unitCost, 0) * 100) / 100;
@@ -845,13 +861,13 @@ export default function ParLevelPortal() {
             await integrations.metrc.receiveTransfer({ recipientLicense: LOC_LICENSE[o.locId], manifestNumber: o.manifest,
               packages: lines.filter((l) => l.packageLabel).map((l) => ({ label: l.packageLabel ?? "", accepted: Math.max(0, l.received - l.damaged), rejected: Math.max(0, l.approved - l.received) + l.damaged, reason: l.damaged ? "Damaged" : undefined })) });
             const dmg = lines.filter((l) => l.damaged > 0 && l.packageLabel);
-            if (dmg.length) await integrations.metrc.adjustPackages(LOC_LICENSE[o.locId], dmg.map((l) => ({ label: l.packageLabel ?? "", quantity: -l.damaged, unitOfMeasure: "Each" as const, reason: "Damage (reason name to confirm)", date: isoDate(at) })));
+            if (dmg.length) await integrations.metrc.adjustPackages(LOC_LICENSE[o.locId], dmg.map((l) => ({ label: l.packageLabel ?? "", quantity: -l.damaged, unitOfMeasure: isBulk(l.sku) ? "Grams" as const : "Each" as const, reason: "Damage (reason name to confirm)", date: isoDate(at) })));
           }
           const r = await integrations.dutchie.receiveInventory({ locationId: o.locId, vendorId: o.vendorId, vendorLicense: VENDOR_LICENSE[o.vendorId], deliveredBy: o.carrier ?? "", deliveredOn: new Date(at).toISOString(),
-            transactionId: o.manifest ?? id, orderTitle: id, externalId: id, items: accepted.filter((x) => x.n > 0).map((x) => ({ productId: x.l.sku, quantity: x.n, unitType: "Each" as const, packageId: x.l.packageLabel, cost: x.l.unitCost })) });
+            transactionId: o.manifest ?? id, orderTitle: id, externalId: id, items: accepted.filter((x) => x.n > 0).map((x) => ({ productId: x.l.sku, quantity: x.n, unitType: isBulk(x.l.sku) ? "Grams" as const : "Each" as const, packageId: x.l.packageLabel, cost: x.l.unitCost })) });
           upd(id, (x) => ({ ...x, dutchieReceiveId: r.receiveId }));
           void syncDutchie();
-          const qLines = accepted.filter((x) => x.n > 0).map((x) => ({ description: `${x.l.sku} ${PRODUCT[x.l.sku].name}`, qty: x.n, unitPrice: x.l.unitCost, amount: Math.round(x.n * x.l.unitCost * 100) / 100 }));
+          const qLines = accepted.filter((x) => x.n > 0).map((x) => ({ description: `${x.l.sku} ${PRODUCT[x.l.sku].name}${isBulk(x.l.sku) ? " (bulk flower, grams)" : ""}`, qty: x.n, unitPrice: x.l.unitCost, amount: Math.round(x.n * x.l.unitCost * 100) / 100 }));
           const due = isoDate(at + (Number(VENDOR_BY_ID[o.vendorId].terms.replace(/\D/g, "")) || 14) * DAY);
           const [qi, qb] = await Promise.all([
             integrations.quickbooks.createInvoice({ companyId: QBO_COMPANY.vendor(o.vendorId), customerName: `${RETAILER} · ${LOC_NAME[o.locId]}`, docNumber: invId, txnDate: isoDate(at), dueDate: due, lines: qLines }),
@@ -1174,7 +1190,7 @@ export default function ParLevelPortal() {
               { value: String(totalBelow), label: "SKUs below Min", detail: `${money0(ap)} open payables` },
             ]} />
             <Grid columns={2}>
-              <Section heading="Below Min by vendor and location" caption="Count of SKUs under Min · sample data">
+              <Section heading="Below Min by vendor and location" caption="Count of items under Min (a bulk flower strain counts once) · sample data">
                 <Heatmap rows={VENDORS.map((v) => v.name)} columns={LOCS.map((l) => `${l.name} · ${LOC_LICENSE[l.id]}`)} values={VENDORS.map((v) => LOCS.map((l) => belowCount(v.id, l.id)))} />
               </Section>
               <Section heading="Approval queue by age" caption={`SLA ${SLA_HOURS} hours from submission`}>

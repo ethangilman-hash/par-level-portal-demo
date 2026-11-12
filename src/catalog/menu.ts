@@ -1,6 +1,6 @@
 // Dutchie-style retail menu built from the demo's sample catalog (vendor SKUs + competitor parody brands).
 // Category order, strain types and weight options follow how a typical Dutchie dispensary menu is organized.
-import { ITEMS, PRODUCT, LOCS, SALES, last4, parOf, h, sh, type InvMap, type ParLevel } from "../data";
+import { ITEMS, PRODUCT, LOCS, SALES, last4, parOf, h, sh, costRatio, type InvMap, type ParLevel } from "../data";
 
 export const MENU_CATEGORIES = ["Flower", "Pre-Rolls", "Vaporizers", "Concentrates", "Edibles", "Tinctures", "Topicals", "Accessories"] as const;
 export type MenuCategory = (typeof MENU_CATEGORIES)[number];
@@ -26,18 +26,13 @@ export interface MenuProduct {
   bulk: boolean; options: MenuOption[]; unitCost: number;
 }
 
-const FLOWER_SIZES: { label: string; grams: number; mult: number; share: number; gate: number }[] = [
-  { label: "1g", grams: 1, mult: 0.36, share: 0.25, gate: 0.45 },
-  { label: "1/8oz", grams: 3.5, mult: 1, share: 1, gate: 0 },
-  { label: "1/4oz", grams: 7, mult: 1.85, share: 0.45, gate: 0.3 },
-  { label: "1/2oz", grams: 14, mult: 3.4, share: 0.2, gate: 0.6 },
-  { label: "1oz", grams: 28, mult: 6.2, share: 0.12, gate: 0.5 },
-];
+// Flower is bulk: one item per strain, weighed out of the jar at sale (1g, 1/8, 1/4 … are just how much is weighed),
+// so there are no per-size flower SKUs. Packaged goods keep one option per size.
 
 const title = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/-/g, " ") : s);
 function subOf(name: string, cat: MenuCategory, given: string, bulk: boolean, price: number): string {
   const n = name.toLowerCase();
-  if (cat === "Flower") return bulk ? "Bulk flower" : price >= 40 ? "Premium flower" : "Pre-packaged flower";
+  if (cat === "Flower") return bulk ? (price >= 10 ? "Bulk flower · premium" : "Bulk flower") : "Pre-packaged flower";
   if (given) return title(given);
   switch (cat) {
     case "Pre-Rolls": return n.includes("infused") ? (n.includes("pk") ? "Infused pre-roll packs" : "Infused pre-rolls") : n.includes("blunt") ? "Blunts" : n.includes("pk") ? "Pre-roll packs" : "Singles";
@@ -91,23 +86,23 @@ function build(): MenuProduct[] {
     }
     const thcNum = parseFloat(thc) || 0;
     const thcUnit: MenuProduct["thcUnit"] = thc.endsWith("%") ? "%" : thc.endsWith("mg") ? "mg" : "";
-    const bulk = cat === "Flower" && !vp && it.price <= 10;
+    const bulk = it.bulk;
     let options: MenuOption[];
-    if (cat === "Flower" && !vp) {
-      options = FLOWER_SIZES.filter((s) => bulk || s.gate === 0 || r(s.label) > s.gate)
-        .map((s) => ({ id: `${it.key}@${s.label}`, label: s.label, grams: s.grams, price: Math.max(4, Math.round(it.price * s.mult)), share: s.share }));
+    if (bulk) {
+      // One weighed-out item per strain; price is per gram.
+      options = [{ id: it.key, label: "Bulk (g)", grams: 1, price: it.price, share: 1 }];
     } else if (!vp && cat === "Vaporizers" && it.size === "1g" && r("half") > 0.55) {
       options = [{ id: `${it.key}@0.5g`, label: "0.5g", price: Math.round(it.price * 0.62), share: 0.4 }, { id: it.key, label: "1g", price: it.price, share: 1 }];
     } else if (!vp && cat === "Concentrates" && it.size === "2g" && r("one") > 0.5) {
       options = [{ id: `${it.key}@1g`, label: "1g", price: Math.round(it.price * 0.56), share: 0.5 }, { id: it.key, label: "2g", price: it.price, share: 1 }];
     } else {
-      options = [{ id: it.key, label: it.size === "each" ? "Each" : it.size, price: it.price, share: 1, grams: cat === "Flower" ? 3.5 : undefined }];
+      options = [{ id: it.key, label: it.size === "each" ? "Each" : it.size, price: it.price, share: 1 }];
     }
     out.push({
       key: it.key, vendorId: it.vendorId, name: it.name, brand: it.brand, category: cat,
       sub: subOf(it.name, cat, vp?.sub ?? "", bulk, it.price), strain, strainGroups: strainGroupsOf(strain, it.name),
       thc, thcValue: thcNum, thcUnit, bulk, options,
-      unitCost: vp ? vp.cost : Math.round(it.price * (0.45 + 0.1 * r("c")) * 100) / 100,
+      unitCost: vp ? vp.cost : PRODUCT[it.key] ? PRODUCT[it.key].cost : Math.round(it.price * costRatio(it.key, it.bulk) * 100) / 100,
     });
   }
   return out;
@@ -119,7 +114,7 @@ export const OPTION_OWNER: Record<string, { product: MenuProduct; option: MenuOp
 );
 export const menuBrands = (): string[] => Array.from(new Set(MENU.map((m) => m.brand))).sort((a, b) => a.localeCompare(b));
 
-/** Weekly unit sales (last 4-week average) for a product at a location. */
+/** Weekly sales (last 4-week average) for a product at a location: units, or grams for bulk flower. */
 export const weeklyUnits = (key: string, loc: string): number => last4(SALES[key][loc]);
 
 /** Last sale of a menu option at a store: roughly one sales interval back (7 / weekly units), never after `now`. Null = never sold. */
@@ -131,15 +126,16 @@ export function lastSoldAt(optionId: string, loc: string, velocity: number, now:
 /** Par for a menu option: vendor SKUs use the vendor par plan; other options get a sample par from velocity. */
 export function optionPar(loc: string, optionId: string): ParLevel {
   const own = OPTION_OWNER[optionId];
-  if (own.product.vendorId && PRODUCT[optionId]) return parOf(loc, optionId);
+  if (PRODUCT[optionId]) return parOf(loc, optionId);
   const weekly = weeklyUnits(own.product.key, loc) * own.option.share;
   const max = Math.max(4, Math.ceil(weekly * 2.2));
   return { min: Math.max(2, Math.round(weekly * 0.8)), max, maxStrains: 1 };
 }
-/** Bulk flower par, in grams. */
+/** Bulk flower par, in grams (vendor-managed strains use the vendor par plan; others ≈ 2.2 weeks of sales, whole ounces). */
 export function bulkPar(loc: string, key: string): { min: number; max: number } {
-  const g = weeklyUnits(key, loc) * 3.5 * 1.6;
-  return { min: Math.round(g * 0.8), max: Math.round(g * 2.5) };
+  if (PRODUCT[key]) { const p = parOf(loc, key); return { min: p.min, max: p.max }; }
+  const max = Math.max(56, Math.ceil((weeklyUnits(key, loc) * 2.2) / 28) * 28);
+  return { min: Math.max(28, Math.round((max * 0.4) / 14) * 14), max };
 }
 
 /** Starting stock for the mock Dutchie store: units per option id, grams per bulk product. */
@@ -151,13 +147,14 @@ export function seedMenuStock(inv: InvMap): { units: Record<string, Record<strin
     grams[l.id] = {};
     for (const p of MENU) {
       if (p.bulk) {
+        if (inv[`${l.id}|${p.key}`]) { grams[l.id][p.key] = inv[`${l.id}|${p.key}`].qoh; continue; }
         const par = bulkPar(l.id, p.key);
         const f = sh(p.key + l.id + "g");
-        grams[l.id][p.key] = f < 0.06 ? 0 : Math.round(par.max * (0.2 + f * 1.1) * 2) / 2;
+        grams[l.id][p.key] = f < 0.06 ? 0 : Math.round(par.max * (0.2 + f * 1.1) * 10) / 10;
         continue;
       }
       for (const o of p.options) {
-        if (p.vendorId && PRODUCT[o.id]) { units[l.id][o.id] = inv[`${l.id}|${o.id}`].qoh; continue; }
+        if (inv[`${l.id}|${o.id}`]) { units[l.id][o.id] = inv[`${l.id}|${o.id}`].qoh; continue; }
         const par = optionPar(l.id, o.id);
         const f = sh(o.id + l.id + "q");
         units[l.id][o.id] = f < 0.05 ? 0 : Math.round(par.max * (0.2 + f * 1.0));

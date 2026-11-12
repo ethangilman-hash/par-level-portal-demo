@@ -3,7 +3,7 @@
 // key stats up top (incl. next delivery) and sub-tabs for Overview, Orders, Contacts, Notes and Preferences.
 import { Section, Metrics, Table, Select, Segmented, Input, Toggle, Button, Status, Callout, Rows, Properties, Bars, Text, Grid, useState } from "../kit";
 import { useStyles } from "../ui";
-import { DAY, STATUS_TONE, fd, fdt, money, money0, orderValue, balOf, PRODUCT, type Invoice, type Order } from "../data";
+import { DAY, STATUS_TONE, fd, fdt, money, money0, orderValue, balOf, PRODUCT, fmtQty, type Invoice, type Order } from "../data";
 import { ACCOUNT_STATUSES, FREQUENCIES, WEEKDAYS, WINDOWS, schedule, type AccountNote, type AccountPrefs, type Contact, type Schedule } from "../accounts";
 
 export interface AccountSpec { id: string; name: string; subtitle: string; license: string; address: string; terms: string; leadDays: number }
@@ -151,7 +151,7 @@ export function AccountsTab(props: {
           </Section>
           <Section heading="Delivery schedule" caption="From delivery frequency, preferred day and the last delivery">
             <Table columns={["", "Last delivery", "Next delivery", "Order by"]} rows={sched.map((r) => [r.label || a.name, r.s.last ? fd(r.s.last) : "—", fdw(r.s.nextDelivery), fdw(r.s.orderBy)])} />
-            {top.size ? <Bars bars={Array.from(top.entries()).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([sku, u]) => ({ label: PRODUCT[sku].name, value: u, display: `${u} units` }))} /> : <span style={small}>No orders in the last 90 days.</span>}
+            {top.size ? <Bars bars={Array.from(top.entries()).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([sku, u]) => ({ label: PRODUCT[sku].name, value: u, display: fmtQty(sku, u) + (PRODUCT[sku].bulk ? "" : " units") }))} /> : <span style={small}>No orders in the last 90 days.</span>}
           </Section>
         </Grid>
       ) : null}
