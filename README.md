@@ -94,6 +94,10 @@ src/
 
 Sample data is re-rolled on every sign-in (Retail log in / Vendor log in, including after Switch account): `src/session.ts` picks a fresh 32-bit seed, salts the sample hash (`sh()` in `src/data.ts`) and a mulberry32 PRNG with it, and regenerates the weekly sales table, daily Performance history, stock snapshot, last-sold / receipt cadence, the incoming order book, invoices and activity log, then re-seeds the mock integrations. The seed stays fixed until you switch account, so tab hopping never reshuffles. Orders you created or acted on carry over between sign-ins so the approve → ship → receive loop still works. Catalog, costs, vendor accounts and store licenses stay fixed.
 
+## Related: planning pilot
+
+The separate planning-pilot prototype (private, sample data only, with its own server-side login) lives in the private repo `ethangilman-hash/vendor-retail-inventory-interface`. This demo stays separate from it: no shared code, data, or login.
+
 ## License
 
 Proprietary — all rights reserved. Source is public for viewing only; no license is granted to use, copy, modify, or distribute.
